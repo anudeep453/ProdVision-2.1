@@ -62,6 +62,7 @@
                             <button type="button" class="filter-app-btn active" data-app="CVAR ALL">CVAR ALL</button>
                             <button type="button" class="filter-app-btn" data-app="CVAR NYQ">CVAR NYQ</button>
                             <button type="button" class="filter-app-btn" data-app="XVA">XVA</button>
+                            <button type="button" class="filter-app-btn" data-app="REG">REG</button>
                         </div>
                         <button id="view-charts-btn" class="btn btn-info">View Charts</button>
                         <button id="add-entry-btn" class="btn btn-success" style="display: none;">Add New Entry</button>
@@ -171,7 +172,7 @@
                             </th>
                             <th draggable="true" data-column="issue_description" class="draggable-header">
                                 <span class="column-content">
-                                    <span class="column-title">Issue Description</span>
+                                    <span class="column-title">Punctuality Issue Description</span>
                                     <span class="drag-handle">⋮⋮</span>
                                 </span>
                                 <div class="column-resize-handle" title="Drag to resize column"></div>
@@ -192,7 +193,7 @@
                             </th>
                             <th draggable="true" data-column="remarks" class="draggable-header">
                                 <span class="column-content">
-                                    <span class="column-title">Remarks</span>
+                                    <span class="column-title">Quality Issue Description</span>
                                     <span class="drag-handle">⋮⋮</span>
                                 </span>
                                 <div class="column-resize-handle" title="Drag to resize column"></div>
@@ -255,7 +256,64 @@
                             </th>
                             <th draggable="true" data-column="xva_remarks" class="draggable-header">
                                 <span class="column-content">
-                                    <span class="column-title">XVA Remarks</span>
+                                    <span class="column-title">Quality Issue Description</span>
+                                    <span class="drag-handle">⋮⋮</span>
+                                </span>
+                                <div class="column-resize-handle" title="Drag to resize column"></div>
+                            </th>
+                            <!-- REG-specific columns -->
+                            <th draggable="true" data-column="closing" class="draggable-header">
+                                <span class="column-content">
+                                    <span class="column-title">Closing</span>
+                                    <span class="drag-handle">⋮⋮</span>
+                                </span>
+                                <div class="column-resize-handle" title="Drag to resize column"></div>
+                            </th>
+                            <th draggable="true" data-column="iteration" class="draggable-header">
+                                <span class="column-content">
+                                    <span class="column-title">Iteration</span>
+                                    <span class="drag-handle">⋮⋮</span>
+                                </span>
+                                <div class="column-resize-handle" title="Drag to resize column"></div>
+                            </th>
+                            <th draggable="true" data-column="reg_issue" class="draggable-header">
+                                <span class="column-content">
+                                    <span class="column-title">Issue</span>
+                                    <span class="drag-handle">⋮⋮</span>
+                                </span>
+                                <div class="column-resize-handle" title="Drag to resize column"></div>
+                            </th>
+                            <th draggable="true" data-column="action_taken_and_update" class="draggable-header">
+                                <span class="column-content">
+                                    <span class="column-title">Action Taken and Update</span>
+                                    <span class="drag-handle">⋮⋮</span>
+                                </span>
+                                <div class="column-resize-handle" title="Drag to resize column"></div>
+                            </th>
+                            <th draggable="true" data-column="reg_status" class="draggable-header">
+                                <span class="column-content">
+                                    <span class="column-title">Status</span>
+                                    <span class="drag-handle">⋮⋮</span>
+                                </span>
+                                <div class="column-resize-handle" title="Drag to resize column"></div>
+                            </th>
+                            <th draggable="true" data-column="reg_prb" class="draggable-header">
+                                <span class="column-content">
+                                    <span class="column-title">PRB</span>
+                                    <span class="drag-handle">⋮⋮</span>
+                                </span>
+                                <div class="column-resize-handle" title="Drag to resize column"></div>
+                            </th>
+                            <th draggable="true" data-column="reg_hiim" class="draggable-header">
+                                <span class="column-content">
+                                    <span class="column-title">HIIM</span>
+                                    <span class="drag-handle">⋮⋮</span>
+                                </span>
+                                <div class="column-resize-handle" title="Drag to resize column"></div>
+                            </th>
+                            <th draggable="true" data-column="backlog_item" class="draggable-header">
+                                <span class="column-content">
+                                    <span class="column-title">Backlog Item</span>
                                     <span class="drag-handle">⋮⋮</span>
                                 </span>
                                 <div class="column-resize-handle" title="Drag to resize column"></div>
@@ -360,7 +418,7 @@
                     
                     <!-- Legacy single-field inputs (hidden) -->
                     <div style="display:none;">
-                        <textarea id="entry-description" name="issue_description" rows="3" placeholder="Enter issue description"></textarea>
+                        <textarea id="entry-description" name="issue_description" rows="3" placeholder="Enter punctuality issue description"></textarea>
                         <input type="number" id="entry-prb-id-number" name="prb_id_number" placeholder="Enter PRB ID" min="1" step="1">
                         <select id="entry-prb-id-status" name="prb_id_status">
                             <option value="">Select Status</option>
@@ -379,8 +437,8 @@
                 </div>
                 
                 <div class="form-group">
-                    <label for="entry-remarks">Remarks</label>
-                    <textarea id="entry-remarks" name="remarks" rows="2" placeholder="Enter additional notes"></textarea>
+                    <label for="entry-remarks">Quality Issue Description</label>
+                    <textarea id="entry-remarks" name="remarks" rows="2" placeholder="Enter quality issue description"></textarea>
                 </div>
                 
                 
@@ -492,13 +550,80 @@
                 </div>
                 
                 <div class="form-group">
-                    <label for="xva-entry-xva-remarks">XVA Remarks</label>
-                    <textarea id="xva-entry-xva-remarks" name="xva_remarks" rows="3" placeholder="Enter XVA specific remarks"></textarea>
+                    <label for="xva-entry-xva-remarks">Quality Issue Description</label>
+                    <textarea id="xva-entry-xva-remarks" name="xva_remarks" rows="3" placeholder="Enter quality issue description"></textarea>
                 </div>
                 
                 <div class="form-actions">
                     <button type="submit" class="btn btn-primary">Save Entry</button>
                     <button type="button" id="cancel-xva-entry" class="btn btn-secondary">Cancel</button>
+                </div>
+            </form>
+            
+            <!-- REG Form -->
+            <form id="reg-entry-form" class="entry-form" style="display: none;">
+                <div class="form-group">
+                    <label for="reg-entry-date">Date *</label>
+                    <input type="date" id="reg-entry-date" name="date" required max="">
+                </div>
+                
+                <div class="form-group">
+                    <label for="reg-entry-closing">Closing</label>
+                    <select id="reg-entry-closing" name="closing" class="status-select">
+                        <option value="">Select Closing</option>
+                        <option value="M1">M1</option>
+                        <option value="M2">M2</option>
+                        <option value="M3">M3</option>
+                        <option value="M4">M4</option>
+                        <option value="M5">M5</option>
+                        <option value="M6">M6</option>
+                        <option value="M7">M7</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="reg-entry-iteration">Iteration</label>
+                    <input type="text" id="reg-entry-iteration" name="iteration" placeholder="Enter iteration">
+                </div>
+                
+                <div class="form-group">
+                    <label for="reg-entry-issue">Issue</label>
+                    <textarea id="reg-entry-issue" name="reg_issue" rows="3" placeholder="Enter issue"></textarea>
+                </div>
+                
+                <div class="form-group">
+                    <label for="reg-entry-action-taken">Action Taken and Update</label>
+                    <textarea id="reg-entry-action-taken" name="action_taken_and_update" rows="3" placeholder="Enter action taken and updates"></textarea>
+                </div>
+                
+                <div class="form-group">
+                    <label for="reg-entry-status">Status</label>
+                    <select id="reg-entry-status" name="reg_status" class="status-select">
+                        <option value="">Select Status</option>
+                        <option value="ongoing">ongoing</option>
+                        <option value="open">open</option>
+                        <option value="closed">closed</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="reg-entry-prb">PRB</label>
+                    <input type="text" id="reg-entry-prb" name="reg_prb" placeholder="Enter PRB">
+                </div>
+                
+                <div class="form-group">
+                    <label for="reg-entry-hiim">HIIM</label>
+                    <input type="text" id="reg-entry-hiim" name="reg_hiim" placeholder="Enter HIIM">
+                </div>
+                
+                <div class="form-group">
+                    <label for="reg-entry-backlog-item">Backlog Item</label>
+                    <input type="text" id="reg-entry-backlog-item" name="backlog_item" placeholder="Enter backlog item">
+                </div>
+                
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary">Save Entry</button>
+                    <button type="button" id="cancel-reg-entry" class="btn btn-secondary">Cancel</button>
                 </div>
             </form>
         </div>
@@ -585,12 +710,12 @@
                 <div class="chart-visibility-filters">
                     <h4>Chart Visibility:</h4>
                     <div class="visibility-checkboxes">
-                        <label class="visibility-label">
+                        <label class="visibility-label quality-punctuality-only">
                             <input type="checkbox" id="show-quality-chart" checked>
                             <span class="checkmark"></span>
                             Quality
                         </label>
-                        <label class="visibility-label">
+                        <label class="visibility-label quality-punctuality-only">
                             <input type="checkbox" id="show-punctuality-chart" checked>
                             <span class="checkmark"></span>
                             Punctuality
@@ -960,6 +1085,6 @@
         </div>
     </div>
 
-    <script src="{{ url_for('static', filename='js/dashboard.js') }}?v=20250922-4"></script>
+    <script src="{{ url_for('static', filename='js/dashboard.js') }}?v=20250924-4"></script>
 </body>
 </html>

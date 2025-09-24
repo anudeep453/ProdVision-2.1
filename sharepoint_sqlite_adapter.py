@@ -63,6 +63,15 @@ class SharePointSQLiteAdapter:
                 issue_description TEXT,
                 remarks TEXT,
                 xva_remarks TEXT,
+                -- REG-specific columns
+                closing TEXT,
+                iteration TEXT,
+                reg_issue TEXT,
+                action_taken_and_update TEXT,
+                reg_status TEXT,
+                reg_prb TEXT,
+                reg_hiim TEXT,
+                backlog_item TEXT,
                 created_at TEXT,
                 updated_at TEXT
             )
@@ -141,7 +150,16 @@ class SharePointSQLiteAdapter:
                 'sensi_text': 'TEXT',
                 'cf_ra_text': 'TEXT',
                 'acq_text': 'TEXT',
-                'xva_remarks': 'TEXT'
+                'xva_remarks': 'TEXT',
+                # REG-specific columns
+                'closing': 'TEXT',
+                'iteration': 'TEXT',
+                'reg_issue': 'TEXT',
+                'action_taken_and_update': 'TEXT',
+                'reg_status': 'TEXT',
+                'reg_prb': 'TEXT',
+                'reg_hiim': 'TEXT',
+                'backlog_item': 'TEXT'
             }
 
             # Add missing columns
@@ -504,16 +522,19 @@ class SharePointSQLiteAdapter:
             cursor.execute('SELECT id, description, remarks, position, created_at FROM issues WHERE entry_id = ? ORDER BY position ASC, id ASC', (entry_id,))
             entry['issues'] = [{'id': r[0], 'description': r[1], 'remarks': r[2], 'position': r[3], 'created_at': r[4]} for r in cursor.fetchall()]
 
-            cursor.execute('SELECT id, prb_id_number, prb_id_status, prb_link, position, created_at FROM prbs WHERE entry_id = ? ORDER BY position ASC, id ASC', (entry_id,))
-            entry['prbs'] = [{'id': r[0], 'prb_id_number': r[1], 'prb_id_status': r[2], 'prb_link': r[3], 'position': r[4], 'created_at': r[5]} for r in cursor.fetchall()]
+            cursor.execute('SELECT id, prb_id_number, prb_id_status, prb_link, related_issue, position, created_at FROM prbs WHERE entry_id = ? ORDER BY position ASC, id ASC', (entry_id,))
+            entry['prbs'] = [{'id': r[0], 'prb_id_number': r[1], 'prb_id_status': r[2], 'prb_link': r[3], 'related_issue': r[4], 'position': r[5], 'created_at': r[6]} for r in cursor.fetchall()]
 
-            cursor.execute('SELECT id, hiim_id_number, hiim_id_status, hiim_link, position, created_at FROM hiims WHERE entry_id = ? ORDER BY position ASC, id ASC', (entry_id,))
-            entry['hiims'] = [{'id': r[0], 'hiim_id_number': r[1], 'hiim_id_status': r[2], 'hiim_link': r[3], 'position': r[4], 'created_at': r[5]} for r in cursor.fetchall()]
+            cursor.execute('SELECT id, hiim_id_number, hiim_id_status, hiim_link, related_issue, position, created_at FROM hiims WHERE entry_id = ? ORDER BY position ASC, id ASC', (entry_id,))
+            entry['hiims'] = [{'id': r[0], 'hiim_id_number': r[1], 'hiim_id_status': r[2], 'hiim_link': r[3], 'related_issue': r[4], 'position': r[5], 'created_at': r[6]} for r in cursor.fetchall()]
 
             conn.close()
             return entry
             
         except Exception as e:
+            print(f"❌ Error in get_entry_by_id({entry_id}): {str(e)}")
+            import traceback
+            traceback.print_exc()
             return None
     
     def update_entry(self, entry_id: int, update_data: Dict, application_name: str = None) -> Optional[Dict]:
@@ -566,22 +587,24 @@ class SharePointSQLiteAdapter:
             if 'prbs' in update_data:
                     cursor.execute('DELETE FROM prbs WHERE entry_id = ?', (entry_id,))
                     for idx, prb in enumerate(update_data.get('prbs') or []):
-                        cursor.execute('INSERT INTO prbs (entry_id, prb_id_number, prb_id_status, prb_link, position, created_at) VALUES (?, ?, ?, ?, ?, ?)', (
+                        cursor.execute('INSERT INTO prbs (entry_id, prb_id_number, prb_id_status, prb_link, related_issue, position, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)', (
                             entry_id,
                             str(prb.get('prb_id_number', '')) if prb.get('prb_id_number') is not None else '',
                             prb.get('prb_id_status', ''),
                             prb.get('prb_link', ''),
+                            prb.get('related_issue', ''),
                             idx,
                             datetime.utcnow().isoformat()
                         ))
             if 'hiims' in update_data:
                     cursor.execute('DELETE FROM hiims WHERE entry_id = ?', (entry_id,))
                     for idx, hiim in enumerate(update_data.get('hiims') or []):
-                        cursor.execute('INSERT INTO hiims (entry_id, hiim_id_number, hiim_id_status, hiim_link, position, created_at) VALUES (?, ?, ?, ?, ?, ?)', (
+                        cursor.execute('INSERT INTO hiims (entry_id, hiim_id_number, hiim_id_status, hiim_link, related_issue, position, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)', (
                             entry_id,
                             str(hiim.get('hiim_id_number', '')) if hiim.get('hiim_id_number') is not None else '',
                             hiim.get('hiim_id_status', ''),
                             hiim.get('hiim_link', ''),
+                            hiim.get('related_issue', ''),
                             idx,
                             datetime.utcnow().isoformat()
                         ))

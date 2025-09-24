@@ -183,6 +183,9 @@ def validate_entry_data(data):
     if application_name == 'XVA':
         # XVA-specific required fields (only date and application_name are required)
         required_fields = common_required_fields
+    elif application_name == 'REG':
+        # REG-specific required fields (only date and application_name are required)
+        required_fields = common_required_fields
     else:
         # CVAR (ALL/NYQ) required fields: require either single-time fields or arrays
         required_fields = common_required_fields + ['prc_mail_text', 'prc_mail_status']
@@ -212,6 +215,14 @@ def validate_entry_data(data):
         if data.get('quality_target') and data['quality_target'] not in ['Red', 'Yellow', 'Green']:
             return False, 'Invalid quality target status'
         # Skip CVAR-specific validation for XVA entries
+    elif application_name == 'REG':
+        # REG-specific validation (accept legacy and new values)
+        reg_status_val = data.get('reg_status')
+        if reg_status_val:
+            valid_reg_statuses = {'ongoing', 'open', 'closed', 'Open', 'In Progress', 'Resolved', 'Closed'}
+            if reg_status_val not in valid_reg_statuses:
+                return False, 'Invalid REG status'
+        # Skip CVAR/XVA-specific validation for REG entries
     else:
         # CVAR-specific validation - validate single fields or arrays
         if data.get('prc_mail_status') and data['prc_mail_status'] not in ['Red', 'Yellow', 'Green']:

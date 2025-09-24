@@ -26,10 +26,12 @@ const clearChartsFiltersBtn = document.getElementById('clear-charts-filters');
 const entryModal = document.getElementById('entry-modal');
 const cvarEntryForm = document.getElementById('cvar-entry-form');
 const xvaEntryForm = document.getElementById('xva-entry-form');
+const regEntryForm = document.getElementById('reg-entry-form');
 const modalTitle = document.getElementById('modal-title');
 let addEntryBtn;
 const cancelCvarEntryBtn = document.getElementById('cancel-cvar-entry');
 const cancelXvaEntryBtn = document.getElementById('cancel-xva-entry');
+const cancelRegEntryBtn = document.getElementById('cancel-reg-entry');
 const closeBtns = document.querySelectorAll('.close');
 
 const filters = {
@@ -155,8 +157,10 @@ function setupEventListeners() {
     }
     cvarEntryForm.addEventListener('submit', handleCVAREntrySubmit);
     xvaEntryForm.addEventListener('submit', handleXVAEntrySubmit);
+    regEntryForm.addEventListener('submit', handleREGEntrySubmit);
     cancelCvarEntryBtn.addEventListener('click', hideEntryModal);
     cancelXvaEntryBtn.addEventListener('click', hideEntryModal);
+    cancelRegEntryBtn.addEventListener('click', hideEntryModal);
     
     // Time formatting for PRC Mail and CP Alerts
     setupTimeFormatting();
@@ -274,51 +278,29 @@ function setupEventListeners() {
 
 // Fullscreen Filter Listeners
 function setupFullscreenFilterListeners() {
-    console.log('Setting up fullscreen filter listeners...');
-    
     // Single chart fullscreen filters
     const fullscreenApplyBtn = document.getElementById('fullscreen-apply-filters');
-    console.log('Fullscreen apply button:', fullscreenApplyBtn);
     if (fullscreenApplyBtn && !fullscreenApplyBtn.hasAttribute('data-listener-added')) {
         fullscreenApplyBtn.addEventListener('click', handleFullscreenFilterApply);
         fullscreenApplyBtn.setAttribute('data-listener-added', 'true');
-        console.log('Added click listener to fullscreen apply button');
-    } else if (fullscreenApplyBtn) {
-        console.log('Fullscreen apply button listener already added');
-    } else {
-        console.error('Fullscreen apply button not found!');
     }
     
     // All charts fullscreen filters
     const fullscreenAllApplyBtn = document.getElementById('fullscreen-all-apply-filters');
-    console.log('Fullscreen all apply button:', fullscreenAllApplyBtn);
     if (fullscreenAllApplyBtn && !fullscreenAllApplyBtn.hasAttribute('data-listener-added')) {
         fullscreenAllApplyBtn.addEventListener('click', handleFullscreenAllFilterApply);
         fullscreenAllApplyBtn.setAttribute('data-listener-added', 'true');
-        console.log('Added click listener to fullscreen all apply button');
     } else if (fullscreenAllApplyBtn) {
-        console.log('Fullscreen all apply button listener already added');
-    } else {
-        console.error('Fullscreen all apply button not found!');
     }
-    
 }
 
 // Fullscreen filter handlers
 function handleFullscreenFilterApply() {
-    console.log('Fullscreen filter apply clicked');
-    
     // Copy filter values from fullscreen to main filters
     const fullscreenYear = document.getElementById('fullscreen-year-filter');
     const fullscreenMonth = document.getElementById('fullscreen-month-filter');
     const fullscreenApp = document.getElementById('fullscreen-application-filter');
     const fullscreenGraphType = document.querySelector('input[name="fullscreen-graph-type"]:checked');
-    
-    console.log('Fullscreen elements:', {
-        year: fullscreenYear,
-        month: fullscreenMonth,
-        app: fullscreenApp,
-    });
     
     // Update main filters
     if (chartsFilters.year && fullscreenYear) {
@@ -380,18 +362,12 @@ function handleFullscreenAllFilterApply() {
 
 // Sync functions
 function syncFullscreenFilters() {
-    console.log('Syncing fullscreen filters...');
-    
     // Sync year filter
     const fullscreenYear = document.getElementById('fullscreen-year-filter');
-    console.log('Fullscreen year element:', fullscreenYear);
     if (fullscreenYear && chartsFilters.year) {
         Array.from(fullscreenYear.options).forEach(option => {
             option.selected = Array.from(chartsFilters.year.selectedOptions).some(selected => selected.value === option.value);
         });
-        console.log('Synced year filter');
-    } else {
-        console.error('Cannot sync year filter - elements not found');
     }
     
     // Sync month filter
@@ -577,7 +553,10 @@ function getVisibleColumnsForApplication(application) {
     // Define columns to show only for XVA (new XVA-specific columns)
     const xvaOnlyColumns = ['acq', 'valo', 'sensi', 'cf_ra', 'quality_legacy', 'quality_target', 'root_cause_application', 'root_cause_type', 'xva_remarks'];
     
-    // Standard columns that are always visible
+    // Define columns to show only for REG (REG-specific columns - completely separate)
+    const regOnlyColumns = ['closing', 'iteration', 'reg_issue', 'action_taken_and_update', 'reg_status', 'reg_prb', 'reg_hiim', 'backlog_item'];
+    
+    // Standard columns that are always visible (for CVAR/XVA only)
     const standardColumns = ['date', 'day', 'issue_description', 'prb_id', 'hiim_id'];
     
     // Actions column is always visible
@@ -586,6 +565,9 @@ function getVisibleColumnsForApplication(application) {
     if (application === 'XVA') {
         // For XVA, show standard columns + XVA-specific columns + actions
         return [...standardColumns, ...xvaOnlyColumns, ...actionsColumn];
+    } else if (application === 'REG') {
+        // For REG, show only date, day + REG-specific columns + actions (completely separate)
+        return ['date', 'day', ...regOnlyColumns, ...actionsColumn];
     } else {
         // For CVAR ALL and CVAR NYQ, show standard columns + original columns + actions
         const originalColumns = ['prc_mail', 'cp_alerts', 'quality', 'remarks'];
@@ -600,6 +582,12 @@ function toggleColumnsForApplication(application) {
     // Define columns to show only for XVA (new XVA-specific columns)
     const xvaOnlyColumns = ['acq', 'valo', 'sensi', 'cf_ra', 'quality_legacy', 'quality_target', 'root_cause_application', 'root_cause_type', 'xva_remarks'];
     
+    // Define columns to show only for REG (REG-specific columns - completely separate)
+    const regOnlyColumns = ['closing', 'iteration', 'reg_issue', 'action_taken_and_update', 'reg_status', 'reg_prb', 'reg_hiim', 'backlog_item'];
+    
+    // Define columns to hide for REG (all CVAR/XVA columns)
+    const regHiddenColumns = ['prc_mail', 'cp_alerts', 'quality', 'remarks', 'issue_description', 'prb_id', 'hiim_id', ...xvaOnlyColumns];
+    
     // Get all table headers
     const headers = document.querySelectorAll('#entries-table thead th');
     
@@ -613,7 +601,7 @@ function toggleColumnsForApplication(application) {
         
         if (application === 'XVA') {
             // Hide old columns and show XVA-specific columns
-            if (xvaHiddenColumns.includes(column)) {
+            if (xvaHiddenColumns.includes(column) || regOnlyColumns.includes(column)) {
                 header.style.display = 'none';
             } else if (xvaOnlyColumns.includes(column)) {
                 header.style.display = '';
@@ -621,9 +609,22 @@ function toggleColumnsForApplication(application) {
                 // Show standard columns (date, day, issue_description, prb_id, hiim_id)
                 header.style.display = '';
             }
+        } else if (application === 'REG') {
+            // Hide all CVAR/XVA columns and show only REG-specific columns + date/day
+            if (regHiddenColumns.includes(column)) {
+                header.style.display = 'none';
+            } else if (regOnlyColumns.includes(column)) {
+                header.style.display = '';
+            } else if (column === 'date' || column === 'day') {
+                // Show only date and day from standard columns
+                header.style.display = '';
+            } else {
+                // Hide all other columns for REG
+                header.style.display = 'none';
+            }
         } else {
-            // For CVAR ALL and CVAR NYQ, hide XVA-specific columns and show standard columns
-            if (xvaOnlyColumns.includes(column)) {
+            // For CVAR ALL and CVAR NYQ, hide XVA and REG-specific columns and show CVAR columns
+            if (xvaOnlyColumns.includes(column) || regOnlyColumns.includes(column)) {
                 header.style.display = 'none';
             } else {
                 header.style.display = '';
@@ -633,33 +634,23 @@ function toggleColumnsForApplication(application) {
     
     // Also hide/show corresponding cells in existing rows
     const rows = document.querySelectorAll('#entries-table tbody tr');
+    // Build a set of visible columns for the current application to drive cell visibility
+    const visibleColumnsSet = new Set(getVisibleColumnsForApplication(application));
     rows.forEach(row => {
         const cells = row.querySelectorAll('td');
         cells.forEach((cell, index) => {
             const header = headers[index];
-            if (header) {
-                const column = header.getAttribute('data-column');
+            if (!header) return;
+            const column = header.getAttribute('data-column');
 
-                // Skip actions column here as well; visibility controlled by CSS/auth
-                if (column === 'actions') {
-                    return;
-                }
+            // Skip actions column; its visibility is handled via CSS/auth state
+            if (column === 'actions') return;
 
-                if (application === 'XVA') {
-                    if (xvaHiddenColumns.includes(column)) {
-                        cell.style.display = 'none';
-                    } else if (xvaOnlyColumns.includes(column)) {
-                        cell.style.display = '';
-                    } else {
-                        cell.style.display = '';
-                    }
-                } else {
-                    if (xvaOnlyColumns.includes(column)) {
-                        cell.style.display = 'none';
-                    } else {
-                        cell.style.display = '';
-                    }
-                }
+            // Show cell only if its column is in the visible set for this application
+            if (visibleColumnsSet.has(column)) {
+                cell.style.display = '';
+            } else {
+                cell.style.display = 'none';
             }
         });
     });
@@ -669,6 +660,9 @@ function toggleColumnsForApplication(application) {
     
     // Toggle XVA-specific charts and tables visibility
     toggleXVAChartsAndTables(application);
+    
+    // Toggle quality and punctuality chart visibility filters for REG
+    toggleQualityPunctualityFilters(application);
     
     // Reinitialize column resizing for newly visible columns
     // Use a small delay to ensure DOM updates are complete
@@ -680,7 +674,6 @@ function toggleColumnsForApplication(application) {
 }
 
 function toggleFormFieldValidation(application) {
-    console.log('🔧 Toggling form field validation for application:', application);
     
     // Define fields that are required for CVAR but not for XVA
     const cvarRequiredFields = [
@@ -700,14 +693,10 @@ function toggleFormFieldValidation(application) {
             if (application === 'XVA') {
                 // Remove required attribute for XVA (fields are hidden)
                 field.removeAttribute('required');
-                console.log(`  ✅ Removed required from ${fieldName}`);
             } else {
                 // Add required attribute back for CVAR applications
                 field.setAttribute('required', 'required');
-                console.log(`  ✅ Added required to ${fieldName}`);
             }
-        } else {
-            console.log(`  ⚠️ Field not found: ${fieldName}`);
         }
     });
     
@@ -718,18 +707,12 @@ function toggleFormFieldValidation(application) {
             if (application === 'XVA') {
                 // Add required attribute for XVA
                 field.setAttribute('required', 'required');
-                console.log(`  ✅ Added required to ${fieldName}`);
             } else {
                 // Remove required attribute for CVAR applications (fields are hidden)
                 field.removeAttribute('required');
-                console.log(`  ✅ Removed required from ${fieldName}`);
             }
-        } else {
-            console.log(`  ⚠️ Field not found: ${fieldName}`);
         }
     });
-    
-    console.log('🔧 Form field validation toggled successfully');
 }
 
 function toggleXVAChartsAndTables(application) {
@@ -760,6 +743,18 @@ function toggleXVAChartsAndTables(application) {
             label.style.display = '';
         } else {
             label.style.display = 'none';
+        }
+    });
+}
+
+function toggleQualityPunctualityFilters(application) {
+    // Toggle quality and punctuality chart visibility filters for REG
+    const qualityPunctualityLabels = document.querySelectorAll('.visibility-label.quality-punctuality-only');
+    qualityPunctualityLabels.forEach(label => {
+        if (application === 'REG') {
+            label.style.display = 'none';
+        } else {
+            label.style.display = '';
         }
     });
 }
@@ -1356,9 +1351,6 @@ async function calculateMonthEndCounts(month, year) {
 }
 
 function displayEntries(entries) {
-    console.log('🔍 displayEntries called with:', entries.length, 'entries');
-    console.log('🔍 Current application filter:', filters.application);
-    
     entriesTbody.innerHTML = '';
     
     // Show/hide count displays based on filters
@@ -1412,16 +1404,11 @@ function displayEntries(entries) {
         weeklyGroups[weekStart].push(entry);
     });
     
-    console.log('🔍 Weekly groups created:', Object.keys(weeklyGroups).length, 'weeks');
-    console.log('🔍 Weekly groups:', weeklyGroups);
-    
     // Sort weeks by date (newest first)
     const sortedWeeks = Object.keys(weeklyGroups).sort((a, b) => new Date(b) - new Date(a));
-    console.log('🔍 Sorted weeks:', sortedWeeks);
     
     sortedWeeks.forEach(weekStart => {
         const weekEntries = weeklyGroups[weekStart];
-        console.log('🔍 Processing week:', weekStart, 'with', weekEntries.length, 'entries');
         
         // Check if this is the 3rd weekend of the month
         const isInfraWeekend = isThirdWeekendOfMonth(weekStart);
@@ -1429,7 +1416,6 @@ function displayEntries(entries) {
         // Add week header
         const weekHeaderRow = document.createElement('tr');
         weekHeaderRow.className = 'week-header';
-        console.log('🔍 Created week header row with class:', weekHeaderRow.className);
         // Check if this is a month-end week
         const weekStartDate = new Date(weekStart);
         const weekEndDate = new Date(weekStartDate);
@@ -1497,8 +1483,6 @@ function displayEntries(entries) {
             </td>
         `;
         entriesTbody.appendChild(weekHeaderRow);
-        console.log('🔍 Week header appended to DOM. Total rows in tbody:', entriesTbody.children.length);
-        
         // Add entries for this week, expanding multiple items per date into separate rows
         weekEntries.forEach(entry => {
             const expandedRows = createExpandedEntryRows(entry);
@@ -1508,24 +1492,7 @@ function displayEntries(entries) {
         });
     });
     
-    console.log('🔍 Final tbody children count:', entriesTbody.children.length);
-    console.log('🔍 Week headers in DOM:', document.querySelectorAll('.week-header').length);
-    
-    // Debug week header styling
-    const weekHeaders = document.querySelectorAll('.week-header');
-    weekHeaders.forEach((header, index) => {
-        const computedStyle = window.getComputedStyle(header);
-        console.log(`🔍 Week header ${index}:`, {
-            element: header,
-            className: header.className,
-            background: computedStyle.backgroundColor,
-            color: computedStyle.color,
-            display: computedStyle.display,
-            visibility: computedStyle.visibility,
-            height: computedStyle.height,
-            innerHTML: header.innerHTML.substring(0, 100) + '...'
-        });
-    });
+
     
     // Apply column visibility based on current application
     toggleColumnsForApplication(filters.application);
@@ -1536,69 +1503,59 @@ function displayEntries(entries) {
 function createExpandedEntryRows(entry) {
     const rows = [];
     const issues = entry.issues || [];
-    const prbs = entry.prbs || [];
-    const hiims = entry.hiims || [];
-
-    // Index PRBs/HIIMs by related_issue for grouping
-    const prbsByIssue = new Map();
-    prbs.forEach(p => {
-        const key = (p.related_issue || '').trim();
-        if (!prbsByIssue.has(key)) prbsByIssue.set(key, []);
-        prbsByIssue.get(key).push(p);
-    });
-    const hiimsByIssue = new Map();
-    hiims.forEach(h => {
-        const key = (h.related_issue || '').trim();
-        if (!hiimsByIssue.has(key)) hiimsByIssue.set(key, []);
-        hiimsByIssue.get(key).push(h);
-    });
+    // Dedupe PRBs/HIIMs within the entry (by id number + link)
+    const prbsRaw = entry.prbs || [];
+    const hiimsRaw = entry.hiims || [];
+    const makePrbKey = (p) => `${p.prb_id_number || ''}|${p.prb_link || ''}`;
+    const makeHiimKey = (h) => `${h.hiim_id_number || ''}|${h.hiim_link || ''}`;
+    const prbSeen = new Set();
+    const hiimSeen = new Set();
+    const prbs = [];
+    const hiims = [];
+    prbsRaw.forEach(p => { const k = makePrbKey(p); if (!prbSeen.has(k)) { prbSeen.add(k); prbs.push(p); } });
+    hiimsRaw.forEach(h => { const k = makeHiimKey(h); if (!hiimSeen.has(k)) { hiimSeen.add(k); hiims.push(h); } });
 
     const entryId = `entry-${entry.id}`;
 
-    // If there are issues, render each issue row with its related PRBs/HIIMs on the same row
-    if (issues.length > 0) {
-        // Collect unassigned PRBs/HIIMs (no related_issue)
-        const unassignedPrbs = prbs.filter(p => !(p.related_issue || '').trim());
-        const unassignedHiims = hiims.filter(h => !(h.related_issue || '').trim());
-        issues.forEach((issue, index) => {
-            const relatedPrbs = prbsByIssue.get(issue.description.trim()) || [];
-            const relatedHiims = hiimsByIssue.get(issue.description.trim()) || [];
+    // Get all available issues, PRBs, and HIIMs
+    const allIssues = issues.length > 0 ? issues : (entry.issue_description ? [{ description: entry.issue_description }] : []);
+    const allPrbs = prbs.length > 0 ? prbs : (entry.prb_id_number ? [{ prb_id_number: entry.prb_id_number, prb_id_status: entry.prb_id_status, prb_link: entry.prb_link }] : []);
+    const allHiims = hiims.length > 0 ? hiims : (entry.hiim_id_number ? [{ hiim_id_number: entry.hiim_id_number, hiim_id_status: entry.hiim_id_status, hiim_link: entry.hiim_link }] : []);
 
-            // Fallback: if nothing related and this is the first issue, attach unassigned ones
-            const prbsForRow = (relatedPrbs.length > 0 || index !== 0) ? relatedPrbs : (unassignedPrbs.length ? unassignedPrbs : relatedPrbs);
-            const hiimsForRow = (relatedHiims.length > 0 || index !== 0) ? relatedHiims : (unassignedHiims.length ? unassignedHiims : relatedHiims);
+    // Calculate the maximum number of rows needed (at least 1)
+    const maxRows = Math.max(1, allIssues.length, allPrbs.length, allHiims.length);
+    
+    // Calculate total child rows (all rows except the first parent row)
+    const totalChildRows = Math.max(maxRows - 1, 0);
 
-            const itemEntry = {
-                ...entry,
-                issue_description: issue.description,
-                issues: [issue],
-                prbs: prbsForRow,
-                hiims: hiimsForRow,
-                prb_id_number: prbsForRow.length ? prbsForRow.map(p => p.prb_id_number).join(' ') : (entry.prb_id_number || ''),
-                hiim_id_number: hiimsForRow.length ? hiimsForRow.map(h => h.hiim_id_number).join(' ') : (entry.hiim_id_number || '')
-            };
+    for (let i = 0; i < maxRows; i++) {
+        // Get the item for this row (one of each type)
+        const issue = i < allIssues.length ? allIssues[i] : null;
+        const prb = i < allPrbs.length ? allPrbs[i] : null;
+        const hiim = i < allHiims.length ? allHiims[i] : null;
 
-            const isFirst = index === 0;
-            const row = createEntryRow(itemEntry, isFirst, 'issue', isFirst ? entryId : `${entryId}-child-${index-1}`, issues.length - 1);
-            if (!isFirst) {
-                row.classList.add('child-row', 'hidden');
-                row.setAttribute('data-parent-id', entryId);
-            }
-            rows.push(row);
-        });
+        // Create the entry for this row
+        const itemEntry = {
+            ...entry,
+            issue_description: issue ? issue.description : '',
+            issues: issue ? [issue] : [],
+            prbs: prb ? [prb] : [],
+            hiims: hiim ? [hiim] : []
+        };
 
-        return rows;
+        const isFirst = i === 0;
+        const rowId = isFirst ? entryId : `${entryId}-child-${i - 1}`;
+        const row = createEntryRow(itemEntry, isFirst, 'issue', rowId, isFirst ? totalChildRows : 0);
+        
+        // Mark child rows as hidden initially
+        if (!isFirst) {
+            row.classList.add('child-row', 'hidden');
+            row.setAttribute('data-parent-id', entryId);
+        }
+        
+        rows.push(row);
     }
 
-    // Fallback: no issues; render combined single row showing all PRBs and HIIMs on parent
-    const combinedEntry = {
-        ...entry,
-        issue_description: entry.issue_description || '',
-        issues: entry.issue_description ? [{ description: entry.issue_description }] : [],
-        prbs,
-        hiims
-    };
-    rows.push(createEntryRow(combinedEntry, true, null, entryId, 0));
     return rows;
 }
 
@@ -1660,7 +1617,7 @@ function createEntryRow(entry, isFirstRow, itemType, entryId, childCount) {
     }
     
     // DEBUG: log the entry being rendered to help diagnose missing items in the UI
-    try { console.debug('createEntryRow - rendering entry:', entry); } catch(e) {}
+
     
     
     // Check if it's a weekend
@@ -1695,21 +1652,143 @@ function createEntryRow(entry, isFirstRow, itemType, entryId, childCount) {
     const prcMailBadge = prcMailStatus ? `<span class="status-badge status-${prcMailColor}">${formatTimeDisplay(prcMailText)}</span>` : 'N/A';
     const cpAlertsBadge = cpAlertsStatus ? `<span class="status-badge status-${cpAlertsColor}">${formatTimeDisplay(cpAlertsText)}</span>` : 'N/A';
     
-    // Create clickable PRB and HIIM badges only if links exist
-    // Render PRBs: prefer array items, otherwise fallback to legacy single value
+    // Helpers to normalize IDs for robust de-duplication (handle case, prefixes, spacing)
+    const normalizePrbId = (num) => {
+        if (num == null) return '';
+        let s = String(num).trim().toUpperCase();
+        // Remove common prefix variations like PRB, PRB-, PRB_, PRB space
+        s = s.replace(/^PRB[-_\s]?/, '');
+        // Remove spaces
+        s = s.replace(/\s+/g, '');
+        return s;
+    };
+    const normalizeHiimId = (num) => {
+        if (num == null) return '';
+        let s = String(num).trim().toUpperCase();
+        s = s.replace(/^HIIM[-_\s]?/, '');
+        s = s.replace(/\s+/g, '');
+        return s;
+    };
+
+    // Create clickable PRB and HIIM badges with de-duplication by normalized ID number
+    // Render PRBs: combine array items and legacy single value, then deduplicate
     let prbIdBadge = 'N/A';
-    if (prbs.length) {
-        prbIdBadge = prbs.map(p => p.prb_id_number ? (p.prb_link ? `<span class="status-badge status-${(p.prb_id_status||'default')} clickable-id" data-link="${p.prb_link}" data-type="prb" title="Click to open PRB link">${p.prb_id_number}</span>` : `<span class="status-badge status-${(p.prb_id_status||'default')}">${p.prb_id_number}</span>`) : '').join(' ');
-    } else if (prbIdNumber) {
-        prbIdBadge = (entry.prb_link ? `<span class="status-badge status-${prbIdStatus || 'default'} clickable-id" data-link="${entry.prb_link}" data-type="prb" title="Click to open PRB link">${prbIdNumber}</span>` : `<span class="status-badge status-${prbIdStatus || 'default'}">${prbIdNumber}</span>`);
+    const allPrbs = [];
+    
+    // First, add all PRBs from the array
+    if (Array.isArray(prbs)) {
+        allPrbs.push(...prbs);
+    }
+    
+    // Then add legacy PRB if it exists, but check against ALL existing PRBs (including array ones)
+    if (prbIdNumber && prbIdNumber.toString().trim()) {
+        const legacyPrbNorm = normalizePrbId(prbIdNumber);
+        if (legacyPrbNorm) {
+            // Check if this PRB ID is already present in any form
+            const isAlreadyPresent = allPrbs.some(p => {
+                const raw = p && (p.prb_id_number != null ? p.prb_id_number : (p.prb_id != null ? p.prb_id : ''));
+                return normalizePrbId(raw) === legacyPrbNorm;
+            });
+            
+            if (!isAlreadyPresent) {
+                // Create PRB object from legacy fields
+                const legacyPrb = {
+                    prb_id_number: prbIdNumber,
+                    prb_id_status: prbIdStatus || 'default',
+                    prb_link: entry.prb_link
+                };
+                allPrbs.push(legacyPrb);
+            }
+        }
+    }
+    
+    // Final deduplication across all sources
+    if (allPrbs.length > 0) {
+        const seenPrbNums = new Set();
+        const uniquePrbs = [];
+        allPrbs.forEach(p => {
+            if (!p) return; // Skip null/undefined PRBs
+            const raw = p.prb_id_number != null ? p.prb_id_number : (p.prb_id != null ? p.prb_id : '');
+            const norm = normalizePrbId(raw);
+            if (!norm) return; // Skip empty/invalid PRB IDs
+            
+            if (!seenPrbNums.has(norm)) {
+                seenPrbNums.add(norm);
+                uniquePrbs.push(p);
+            }
+        });
+        
+        if (uniquePrbs.length > 0) {
+            prbIdBadge = uniquePrbs.map(p => {
+                const prbNumber = p.prb_id_number || p.prb_id || '';
+                const prbStatus = p.prb_id_status || 'default';
+                const prbLink = p.prb_link;
+                
+                return prbLink
+                    ? `<span class="status-badge status-${prbStatus} clickable-id" data-link="${prbLink}" data-type="prb" title="Click to open PRB link">${prbNumber}</span>`
+                    : `<span class="status-badge status-${prbStatus}">${prbNumber}</span>`;
+            }).join(' ');
+        }
     }
 
-    // Render HIIMs: prefer array items
+    // Render HIIMs: combine array items and legacy single value, then deduplicate
     let hiimIdBadge = 'N/A';
-    if (hiims.length) {
-        hiimIdBadge = hiims.map(h => h.hiim_id_number ? (h.hiim_link ? `<span class="status-badge status-${(h.hiim_id_status||'default')} clickable-id" data-link="${h.hiim_link}" data-type="hiim" title="Click to open HIIM link">${h.hiim_id_number}</span>` : `<span class="status-badge status-${(h.hiim_id_status||'default')}">${h.hiim_id_number}</span>`) : '').join(' ');
-    } else if (hiimIdNumber) {
-        hiimIdBadge = (entry.hiim_link ? `<span class="status-badge status-${hiimIdStatus || 'default'} clickable-id" data-link="${entry.hiim_link}" data-type="hiim" title="Click to open HIIM link">${hiimIdNumber}</span>` : `<span class="status-badge status-${hiimIdStatus || 'default'}">${hiimIdNumber}</span>`);
+    const allHiims = [];
+    
+    // First, add all HIIMs from the array
+    if (Array.isArray(hiims)) {
+        allHiims.push(...hiims);
+    }
+    
+    // Then add legacy HIIM if it exists, but check against ALL existing HIIMs (including array ones)
+    if (hiimIdNumber && hiimIdNumber.toString().trim()) {
+        const legacyHiimNorm = normalizeHiimId(hiimIdNumber);
+        if (legacyHiimNorm) {
+            // Check if this HIIM ID is already present in any form
+            const isAlreadyPresent = allHiims.some(h => {
+                const raw = h && (h.hiim_id_number != null ? h.hiim_id_number : (h.hiim_id != null ? h.hiim_id : ''));
+                return normalizeHiimId(raw) === legacyHiimNorm;
+            });
+            
+            if (!isAlreadyPresent) {
+                // Create HIIM object from legacy fields
+                const legacyHiim = {
+                    hiim_id_number: hiimIdNumber,
+                    hiim_id_status: hiimIdStatus || 'default',
+                    hiim_link: entry.hiim_link
+                };
+                allHiims.push(legacyHiim);
+            }
+        }
+    }
+    
+    // Final deduplication across all sources
+    if (allHiims.length > 0) {
+        const seenHiimNums = new Set();
+        const uniqueHiims = [];
+        allHiims.forEach(h => {
+            if (!h) return; // Skip null/undefined HIIMs
+            const raw = h.hiim_id_number != null ? h.hiim_id_number : (h.hiim_id != null ? h.hiim_id : '');
+            const norm = normalizeHiimId(raw);
+            if (!norm) return; // Skip empty/invalid HIIM IDs
+            
+            if (!seenHiimNums.has(norm)) {
+                seenHiimNums.add(norm);
+                uniqueHiims.push(h);
+            }
+        });
+        
+        if (uniqueHiims.length > 0) {
+            hiimIdBadge = uniqueHiims.map(h => {
+                const hiimNumber = h.hiim_id_number || h.hiim_id || '';
+                const hiimStatus = h.hiim_id_status || 'default';
+                const hiimLink = h.hiim_link;
+                
+                return hiimLink
+                    ? `<span class="status-badge status-${hiimStatus} clickable-id" data-link="${hiimLink}" data-type="hiim" title="Click to open HIIM link">${hiimNumber}</span>`
+                    : `<span class="status-badge status-${hiimStatus}">${hiimNumber}</span>`;
+            }).join(' ');
+        }
     }
     
     const qualityClass = entry.quality_status ? `quality-${entry.quality_status.toLowerCase()}` : '';
@@ -1793,28 +1872,67 @@ function createEntryRow(entry, isFirstRow, itemType, entryId, childCount) {
     const rootCauseTypeDisplay = isFirstRow ? (entry.root_cause_type || 'N/A') : '';
     const xvaRemarksDisplay = isFirstRow ? (entry.xva_remarks || 'N/A') : '';
 
-    // Render all columns in the same order as headers
-    row.innerHTML = `
-        <td class="date-cell">${dateDisplay}</td>
-        <td class="day-column">${dayOfWeek}</td>
-        <td class="common-field">${prcMailDisplay}</td>
-        <td class="common-field">${cpAlertsDisplay}</td>
-        <td class="common-field">${qualityDisplay}</td>
-        <td class="item-field">${issuesDisplay}</td>
-        <td class="item-field">${prbDisplay}</td>
-        <td class="item-field">${hiimDisplay}</td>
-        <td class="common-field">${remarksDisplay}</td>
-        <td class="common-field">${acqDisplay}</td>
-        <td class="common-field">${valoDisplay}</td>
-        <td class="common-field">${sensiDisplay}</td>
-        <td class="common-field">${cfRaDisplay}</td>
-        <td class="common-field">${qualityLegacyDisplay}</td>
-        <td class="common-field">${qualityTargetDisplay}</td>
-        <td class="common-field">${rootCauseApplicationDisplay}</td>
-        <td class="common-field">${rootCauseTypeDisplay}</td>
-        <td class="common-field">${xvaRemarksDisplay}</td>
-        <td class="edit-column">${actionsDisplay}</td>
-    `;
+    // REG specific displays (only populate on first row)
+    // REG ID removed from UI
+    const closingDisplay = isFirstRow ? (entry.closing || 'N/A') : '';
+    const iterationDisplay = isFirstRow ? (entry.iteration || 'N/A') : '';
+    const regIssueDisplay = isFirstRow ? (entry.reg_issue || 'N/A') : '';
+    const actionTakenDisplay = isFirstRow ? (entry.action_taken_and_update || 'N/A') : '';
+    const regStatusRaw = (entry.reg_status || '').toLowerCase();
+    const regStatusClass = (regStatusRaw === 'in progress' || regStatusRaw === 'resolved') ? 'ongoing' : regStatusRaw.replace(/\s+/g, '-');
+    const regStatusDisplay = isFirstRow ? (entry.reg_status ? `<span class="status-badge status-${regStatusClass}">${entry.reg_status}</span>` : 'N/A') : '';
+    const regPrbDisplay = isFirstRow ? (entry.reg_prb || 'N/A') : '';
+    const regHiimDisplay = isFirstRow ? (entry.reg_hiim || 'N/A') : '';
+    const backlogItemDisplay = isFirstRow ? (entry.backlog_item || 'N/A') : '';
+
+    // Render all columns in the current order as defined by columnOrder and add data-column for robustness
+    const columnContent = {
+        date: { html: dateDisplay, cls: 'date-cell' },
+        day: { html: dayOfWeek, cls: 'day-column' },
+        prc_mail: { html: prcMailDisplay, cls: 'common-field' },
+        cp_alerts: { html: cpAlertsDisplay, cls: 'common-field' },
+        quality: { html: qualityDisplay, cls: 'common-field' },
+        issue_description: { html: issuesDisplay, cls: 'item-field' },
+        prb_id: { html: prbDisplay, cls: 'item-field' },
+        hiim_id: { html: hiimDisplay, cls: 'item-field' },
+        remarks: { html: remarksDisplay, cls: 'common-field' },
+        acq: { html: acqDisplay, cls: 'common-field' },
+        valo: { html: valoDisplay, cls: 'common-field' },
+        sensi: { html: sensiDisplay, cls: 'common-field' },
+        cf_ra: { html: cfRaDisplay, cls: 'common-field' },
+        quality_legacy: { html: qualityLegacyDisplay, cls: 'common-field' },
+        quality_target: { html: qualityTargetDisplay, cls: 'common-field' },
+        root_cause_application: { html: rootCauseApplicationDisplay, cls: 'common-field' },
+        root_cause_type: { html: rootCauseTypeDisplay, cls: 'common-field' },
+        xva_remarks: { html: xvaRemarksDisplay, cls: 'common-field' },
+    // reg_id removed from UI
+        closing: { html: closingDisplay, cls: 'common-field' },
+        iteration: { html: iterationDisplay, cls: 'common-field' },
+        reg_issue: { html: regIssueDisplay, cls: 'common-field' },
+        action_taken_and_update: { html: actionTakenDisplay, cls: 'common-field' },
+        reg_status: { html: regStatusDisplay, cls: 'common-field' },
+        reg_prb: { html: regPrbDisplay, cls: 'common-field' },
+        reg_hiim: { html: regHiimDisplay, cls: 'common-field' },
+        backlog_item: { html: backlogItemDisplay, cls: 'common-field' },
+        actions: { html: actionsDisplay, cls: 'edit-column' }
+    };
+
+    // Fallback if columnOrder is not initialized
+    const order = (typeof columnOrder !== 'undefined' && Array.isArray(columnOrder) && columnOrder.length)
+        ? columnOrder
+    : ['date', 'day', 'prc_mail', 'cp_alerts', 'quality', 'issue_description', 'prb_id', 'hiim_id', 'remarks', 'acq', 'valo', 'sensi', 'cf_ra', 'quality_legacy', 'quality_target', 'root_cause_application', 'root_cause_type', 'xva_remarks', 'closing', 'iteration', 'reg_issue', 'action_taken_and_update', 'reg_status', 'reg_prb', 'reg_hiim', 'backlog_item', 'actions'];
+
+    // Only render cells for columns intended to be visible for the current application.
+    const visibleSet = new Set(getVisibleColumnsForApplication(filters.application));
+    const cellsHtml = order.map(col => {
+        const shouldShow = visibleSet.has(col);
+        const c = columnContent[col] || { html: '', cls: 'common-field' };
+        // Always include a TD in the correct order so column resizing/reordering indexes stay aligned,
+        // but hide it via inline style when not part of the current application's columns.
+        const style = shouldShow ? '' : ' style="display:none"';
+        return `<td class="${c.cls}" data-column="${col}"${style}>${shouldShow ? (c.html || '') : ''}</td>`;
+    }).join('');
+    row.innerHTML = cellsHtml;
     
     // Add click handlers for clickable IDs
     setTimeout(() => {
@@ -1830,7 +1948,7 @@ function createEntryRow(entry, isFirstRow, itemType, entryId, childCount) {
         });
     }, 0);
     // DEBUG: log the generated HTML for this row so we can inspect whether multiple items were rendered
-    try { console.debug('createEntryRow - rendered row HTML for id', entry.id, row.innerHTML); } catch(e) {}
+
     
     return row;
 }
@@ -2653,6 +2771,7 @@ function showEntryModal(entry = null) {
     if (filters.application === 'XVA') {
         cvarEntryForm.style.display = 'none';
         xvaEntryForm.style.display = 'block';
+        regEntryForm.style.display = 'none';
         
         if (entry) {
             modalTitle.textContent = 'Edit XVA Entry';
@@ -2669,8 +2788,29 @@ function showEntryModal(entry = null) {
                 showWeekendWarning();
             }
         }
+    } else if (filters.application === 'REG') {
+        cvarEntryForm.style.display = 'none';
+        xvaEntryForm.style.display = 'none';
+        regEntryForm.style.display = 'block';
+        
+        if (entry) {
+            modalTitle.textContent = 'Edit REG Entry';
+            populateREGEntryForm(entry);
+        } else {
+            modalTitle.textContent = 'Add New REG Entry';
+            regEntryForm.reset();
+            // Set default date based on current day
+            const defaultDate = getDefaultEntryDate();
+            document.getElementById('reg-entry-date').value = defaultDate;
+            
+            // Check if the default date is a weekend and show warning
+            if (isWeekend(defaultDate)) {
+                showWeekendWarning();
+            }
+        }
     } else {
         xvaEntryForm.style.display = 'none';
+        regEntryForm.style.display = 'none';
         cvarEntryForm.style.display = 'block';
         
         if (entry) {
@@ -2808,29 +2948,8 @@ function populateCVAREntryForm(entry) {
     document.getElementById('entry-cp-alerts-status').value = entry.cp_alerts_status || '';
     
     document.getElementById('entry-quality').value = entry.quality_status || '';
-    // Populate repeatable Issues
-    clearContainerItems('issues-container');
-    if (entry.issues && entry.issues.length) {
-        entry.issues.forEach(it => addIssueItem(it.description || ''));
-    } else if (entry.issue_description) {
-        addIssueItem(entry.issue_description);
-    }
-
-    // Populate repeatable PRBs
-    clearContainerItems('prbs-container');
-    if (entry.prbs && entry.prbs.length) {
-        entry.prbs.forEach(p => addPrbItem(false, p));
-    } else if (entry.prb_id_number) {
-        addPrbItem(false, { id: entry.prb_id_number, status: entry.prb_id_status, link: entry.prb_link });
-    }
-
-    // Populate repeatable HIIMs
-    clearContainerItems('hiims-container');
-    if (entry.hiims && entry.hiims.length) {
-        entry.hiims.forEach(h => addHiimItem(false, h));
-    } else if (entry.hiim_id_number) {
-        addHiimItem(false, { id: entry.hiim_id_number, status: entry.hiim_id_status, link: entry.hiim_link });
-    }
+    // Populate combined item cards for CVAR
+    populateCombinedFromEntry(entry, false);
 
     document.getElementById('entry-remarks').value = entry.remarks || '';
 }
@@ -2864,27 +2983,78 @@ function populateXVAEntryForm(entry) {
     setTimeout(() => {
         setupStatusSelectStyling();
     }, 100);
-    // Populate repeatable PRBs and HIIMs for XVA
-    clearContainerItems('xva-prbs-container');
-    clearContainerItems('xva-hiims-container');
-    clearContainerItems('xva-issues-container');
-    if (entry.prbs && entry.prbs.length) {
-        entry.prbs.forEach(p => addPrbItem(true, p));
-    } else if (entry.prb_id_number) {
-        addPrbItem(true, { id: entry.prb_id_number, status: entry.prb_id_status, link: entry.prb_link });
-    }
+    // Populate combined item cards for XVA
+    populateCombinedFromEntry(entry, true);
+}
 
-    // Populate repeatable Issues for XVA
-    if (entry.issues && entry.issues.length) {
-        entry.issues.forEach(it => addIssueItem(it.description || '', true));
-    } else if (entry.issue_description) {
-        addIssueItem(entry.issue_description, true);
+function populateREGEntryForm(entry) {
+    document.getElementById('reg-entry-date').value = entry.date;
+    // reg-entry-id removed
+    const closingSelect = document.getElementById('reg-entry-closing');
+    if (closingSelect) {
+        if (entry.closing && !Array.from(closingSelect.options).some(opt => opt.value === entry.closing)) {
+            const opt = document.createElement('option');
+            opt.value = entry.closing;
+            opt.textContent = entry.closing;
+            closingSelect.appendChild(opt);
+        }
+        closingSelect.value = entry.closing || '';
     }
+    document.getElementById('reg-entry-iteration').value = entry.iteration || '';
+    document.getElementById('reg-entry-issue').value = entry.reg_issue || '';
+    document.getElementById('reg-entry-action-taken').value = entry.action_taken_and_update || '';
+    // Map legacy statuses to new options
+    const legacy = (entry.reg_status || '').toLowerCase();
+    let mapped = legacy;
+    if (legacy === 'in progress' || legacy === 'resolved') {
+        mapped = 'ongoing';
+    }
+    if (legacy === 'open' || legacy === 'closed' || legacy === 'ongoing') {
+        document.getElementById('reg-entry-status').value = mapped;
+    } else {
+        // If legacy value like 'Open' with caps, set to lowercase equivalent when possible
+        if (entry.reg_status === 'Open') document.getElementById('reg-entry-status').value = 'open';
+        else if (entry.reg_status === 'Closed') document.getElementById('reg-entry-status').value = 'closed';
+        else document.getElementById('reg-entry-status').value = '';
+    }
+    document.getElementById('reg-entry-prb').value = entry.reg_prb || '';
+    document.getElementById('reg-entry-hiim').value = entry.reg_hiim || '';
+    document.getElementById('reg-entry-backlog-item').value = entry.backlog_item || '';
+    
+    // Apply status styling for REG fields after populating values
+    setTimeout(() => {
+        setupStatusSelectStyling();
+    }, 100);
+}
 
-    if (entry.hiims && entry.hiims.length) {
-        entry.hiims.forEach(h => addHiimItem(true, h));
-    } else if (entry.hiim_id_number) {
-        addHiimItem(true, { id: entry.hiim_id_number, status: entry.hiim_id_status, link: entry.hiim_link });
+// Populate the new combined item cards UI from an entry object's issues/prbs/hiims
+function populateCombinedFromEntry(entry, isXva) {
+    const containerId = isXva ? 'xva-combined-items-container' : 'combined-items-container';
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    
+    // Clear any existing cards
+    container.innerHTML = '';
+
+    const issues = Array.isArray(entry.issues) && entry.issues.length ? entry.issues.map(i => i.description).filter(Boolean) : [];
+    const prbs = Array.isArray(entry.prbs) ? entry.prbs : [];
+    const hiims = Array.isArray(entry.hiims) ? entry.hiims : [];
+
+    // Get all available issues, PRBs, and HIIMs (including legacy data)
+    const allIssues = issues.length > 0 ? issues : (entry.issue_description ? [entry.issue_description] : []);
+    const allPrbs = prbs.length > 0 ? prbs : (entry.prb_id_number ? [{ prb_id_number: entry.prb_id_number, prb_id_status: entry.prb_id_status, prb_link: entry.prb_link }] : []);
+    const allHiims = hiims.length > 0 ? hiims : (entry.hiim_id_number ? [{ hiim_id_number: entry.hiim_id_number, hiim_id_status: entry.hiim_id_status, hiim_link: entry.hiim_link }] : []);
+
+    // Calculate the maximum number of cards needed (at least 1)
+    const maxCards = Math.max(1, allIssues.length, allPrbs.length, allHiims.length);
+
+    // Create one card for each item combination (one of each type per card)
+    for (let i = 0; i < maxCards; i++) {
+        const issue = i < allIssues.length ? allIssues[i] : '';
+        const prb = i < allPrbs.length ? allPrbs[i] : null;
+        const hiim = i < allHiims.length ? allHiims[i] : null;
+        
+        addCombinedItemCard(isXva, { issue, prb, hiim });
     }
 }
 
@@ -2941,7 +3111,7 @@ function addIssueItem(initialText = '', isXva = false) {
     const textarea = document.createElement('textarea');
     textarea.className = 'issue-description';
     textarea.rows = 2;
-    textarea.placeholder = 'Enter issue description';
+    textarea.placeholder = 'Enter punctuality issue description';
     textarea.value = initialText || '';
 
     const removeBtn = document.createElement('button');
@@ -3051,7 +3221,7 @@ function addHiimItem(isXva = false, hiimData = null) {
     updateHiimRemoveButtons(isXva);
 }
 
-function addCombinedItemCard(isXva = false) {
+function addCombinedItemCard(isXva = false, initialData = null) {
     const containerId = isXva ? 'xva-combined-items-container' : 'combined-items-container';
     const container = document.getElementById(containerId);
     if (!container) return;
@@ -3095,7 +3265,10 @@ function addCombinedItemCard(isXva = false) {
     const issueTextarea = document.createElement('textarea');
     issueTextarea.className = 'issue-description';
     issueTextarea.rows = 2;
-    issueTextarea.placeholder = 'Enter issue description';
+    issueTextarea.placeholder = 'Enter punctuality issue description';
+    if (initialData && initialData.issue) {
+        issueTextarea.value = initialData.issue;
+    }
 
     issueFields.appendChild(issueTextarea);
     issueSection.appendChild(issueLabel);
@@ -3112,7 +3285,7 @@ function addCombinedItemCard(isXva = false) {
     // Add helper text for PRB section
     const prbHelper = document.createElement('div');
     prbHelper.className = 'helper-text';
-    prbHelper.textContent = 'Requires issue description to be filled first';
+    prbHelper.textContent = 'Requires punctuality issue description to be filled first';
 
     const prbFields = document.createElement('div');
     prbFields.className = 'section-fields';
@@ -3136,6 +3309,14 @@ function addCombinedItemCard(isXva = false) {
     prbLinkInput.placeholder = 'https://prb.example.com/12345';
     prbLinkInput.disabled = true; // Initially disabled
 
+    // Populate initial data if provided
+    if (initialData && initialData.prb) {
+        const p = initialData.prb;
+        prbIdInput.value = p.prb_id_number || p.id || '';
+        prbStatusSelect.value = p.prb_id_status || p.status || '';
+        prbLinkInput.value = p.prb_link || p.link || '';
+    }
+
     prbFields.appendChild(prbIdInput);
     prbFields.appendChild(prbStatusSelect);
     prbFields.appendChild(prbLinkInput);
@@ -3154,7 +3335,7 @@ function addCombinedItemCard(isXva = false) {
     // Add helper text for HIIM section
     const hiimHelper = document.createElement('div');
     hiimHelper.className = 'helper-text';
-    hiimHelper.textContent = 'Requires issue description to be filled first';
+    hiimHelper.textContent = 'Requires punctuality issue description to be filled first';
 
     const hiimFields = document.createElement('div');
     hiimFields.className = 'section-fields';
@@ -3177,6 +3358,14 @@ function addCombinedItemCard(isXva = false) {
     hiimLinkInput.className = 'hiim-link';
     hiimLinkInput.placeholder = 'https://hiim.example.com/12345';
     hiimLinkInput.disabled = true; // Initially disabled
+
+    // Populate initial data if provided
+    if (initialData && initialData.hiim) {
+        const h = initialData.hiim;
+        hiimIdInput.value = h.hiim_id_number || h.id || '';
+        hiimStatusSelect.value = h.hiim_id_status || h.status || '';
+        hiimLinkInput.value = h.hiim_link || h.link || '';
+    }
 
     hiimFields.appendChild(hiimIdInput);
     hiimFields.appendChild(hiimStatusSelect);
@@ -3221,6 +3410,19 @@ function addCombinedItemCard(isXva = false) {
     card.appendChild(hiimSection);
 
     container.appendChild(card);
+
+    // If we have an initial issue description, enable PRB/HIIM fields
+    if (issueTextarea.value.trim().length > 0) {
+        const hasIssueText = true;
+        prbIdInput.disabled = !hasIssueText;
+        prbStatusSelect.disabled = !hasIssueText;
+        prbLinkInput.disabled = !hasIssueText;
+        hiimIdInput.disabled = !hasIssueText;
+        hiimStatusSelect.disabled = !hasIssueText;
+        hiimLinkInput.disabled = !hasIssueText;
+        prbHelper.style.display = 'none';
+        hiimHelper.style.display = 'none';
+    }
 }
 
 function updateCardNumbers(containerId) {
@@ -3284,12 +3486,14 @@ function serializePrbs(isXva = false) {
             const idInput = card.querySelector('.prb-id-number');
             const statusSelect = card.querySelector('.prb-id-status');
             const linkInput = card.querySelector('.prb-link');
+            const issueTextarea = card.querySelector('.issue-description');
             
             if (idInput && idInput.value) {
                 prbs.push({
                     prb_id_number: parseInt(idInput.value),
                     prb_id_status: statusSelect ? statusSelect.value : '',
-                    prb_link: linkInput ? linkInput.value : ''
+                    prb_link: linkInput ? linkInput.value : '',
+                    related_issue: issueTextarea && issueTextarea.value ? issueTextarea.value.trim() : ''
                 });
             }
         });
@@ -3330,12 +3534,14 @@ function serializeHiims(isXva = false) {
             const idInput = card.querySelector('.hiim-id-number');
             const statusSelect = card.querySelector('.hiim-id-status');
             const linkInput = card.querySelector('.hiim-link');
+            const issueTextarea = card.querySelector('.issue-description');
             
             if (idInput && idInput.value) {
                 hiims.push({
                     hiim_id_number: parseInt(idInput.value),
                     hiim_id_status: statusSelect ? statusSelect.value : '',
-                    hiim_link: linkInput ? linkInput.value : ''
+                    hiim_link: linkInput ? linkInput.value : '',
+                    related_issue: issueTextarea && issueTextarea.value ? issueTextarea.value.trim() : ''
                 });
             }
         });
@@ -3426,7 +3632,7 @@ function validateCombinedItems(isXva = false) {
             const hasHiim = hiimIdInput && hiimIdInput.value.trim();
             
             if ((hasPrb || hasHiim) && !hasIssue) {
-                errors.push(`Item Set #${index + 1}: PRB or HIIM entries require an issue description.`);
+                errors.push(`Item Set #${index + 1}: PRB or HIIM entries require a punctuality issue description.`);
             }
         });
     }
@@ -3453,17 +3659,7 @@ async function handleCVAREntrySubmit(event) {
         return;
     }
     
-    console.log('=== CVAR SAVE BUTTON DEBUG ===');
-    console.log('Current application:', filters.application);
-    console.log('CVAR Form data being submitted...');
-    
     const formData = new FormData(cvarEntryForm);
-    
-    // Debug: Log all form data
-    console.log('Form data entries:');
-    for (let [key, value] of formData.entries()) {
-        console.log(`  ${key}: ${value}`);
-    }
     
     // Get CVAR timing fields (24-hour format, no AM/PM needed)
     const prcMailTime = formData.get('prc_mail_text');
@@ -3526,12 +3722,6 @@ async function handleCVAREntrySubmit(event) {
         entryData.hiim_id_status = '';
         entryData.hiim_link = '';
     }
-    
-    console.log('📝 Constructed entry data:', entryData);
-    console.log('🔍 HIIM specific values:');
-    console.log('  hiim_id_number:', entryData.hiim_id_number);
-    console.log('  hiim_id_status:', entryData.hiim_id_status);
-    console.log('  hiim_link:', entryData.hiim_link);
     
     try {
         const url = currentEntryId ? `/api/entries/${currentEntryId}` : '/api/entries';
@@ -3701,6 +3891,58 @@ async function handleXVAEntrySubmit(event) {
     }
 }
 
+async function handleREGEntrySubmit(event) {
+    event.preventDefault();
+    
+    const formData = new FormData(regEntryForm);
+    
+
+    // Build REG entry data using only REG fields and user input
+    const entryData = {
+        date: formData.get('date'),
+        day: new Date(formData.get('date')).toLocaleDateString('en-US', { weekday: 'long' }),
+        application_name: 'REG',
+    // reg_id removed
+        closing: formData.get('closing'),
+        iteration: formData.get('iteration'),
+        reg_issue: formData.get('reg_issue'),
+        action_taken_and_update: formData.get('action_taken_and_update'),
+        reg_status: formData.get('reg_status'),
+        reg_prb: formData.get('reg_prb'),
+        reg_hiim: formData.get('reg_hiim'),
+        backlog_item: formData.get('backlog_item')
+    };
+    
+    try {
+        const url = currentEntryId ? `/api/entries/${currentEntryId}` : '/api/entries';
+        const method = currentEntryId ? 'PUT' : 'POST';
+        
+        const response = await fetch(url, {
+            method: method,
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            credentials: 'include',
+            body: JSON.stringify(entryData)
+        });
+        
+        if (response.ok) {
+            hideEntryModal();
+            loadData(); // Refresh data
+        } else {
+            const error = await response.json();
+            if (error.error && error.error.includes('already exists')) {
+                alert('Error: ' + error.error + '\n\nPlease edit the existing entry or choose a different date.');
+            } else {
+                alert('Error saving REG entry: ' + error.error);
+            }
+        }
+    } catch (error) {
+        console.error('Error saving REG entry:', error);
+        alert('Failed to save REG entry. Please try again.');
+    }
+}
+
 async function editEntry(entryId) {
     try {
         // Fetch the entry data from the API
@@ -3841,7 +4083,10 @@ function updateChartVisibility() {
         const checkbox = chartVisibilityFilters[chartType];
         
         if (wrapper && checkbox) {
-            if (checkbox.checked) {
+            // For REG view, hide quality and punctuality charts regardless of checkbox state
+            if (filters.application === 'REG' && (chartType === 'quality' || chartType === 'punctuality')) {
+                wrapper.classList.add('hidden');
+            } else if (checkbox.checked) {
                 wrapper.classList.remove('hidden');
             } else {
                 wrapper.classList.add('hidden');
@@ -5582,13 +5827,13 @@ window.editEntry = editEntry;
 window.deleteEntry = deleteEntry;
 
 // Column Reordering Functionality
-let columnOrder = ['date', 'day', 'prc_mail', 'cp_alerts', 'quality', 'issue_description', 'prb_id', 'hiim_id', 'remarks', 'acq', 'valo', 'sensi', 'cf_ra', 'quality_legacy', 'quality_target', 'root_cause_application', 'root_cause_type', 'xva_remarks', 'actions'];
+let columnOrder = ['date', 'day', 'prc_mail', 'cp_alerts', 'quality', 'issue_description', 'prb_id', 'hiim_id', 'remarks', 'acq', 'valo', 'sensi', 'cf_ra', 'quality_legacy', 'quality_target', 'root_cause_application', 'root_cause_type', 'xva_remarks', 'closing', 'iteration', 'reg_issue', 'action_taken_and_update', 'reg_status', 'reg_prb', 'reg_hiim', 'backlog_item', 'actions'];
 let draggedElement = null;
 let draggedIndex = -1;
 
 // Ensure all columns are included in the column order
 function ensureAllColumnsInOrder() {
-    const allColumns = ['date', 'day', 'prc_mail', 'cp_alerts', 'quality', 'issue_description', 'prb_id', 'hiim_id', 'remarks', 'acq', 'valo', 'sensi', 'cf_ra', 'quality_legacy', 'quality_target', 'root_cause_application', 'root_cause_type', 'xva_remarks', 'actions'];
+    const allColumns = ['date', 'day', 'prc_mail', 'cp_alerts', 'quality', 'issue_description', 'prb_id', 'hiim_id', 'remarks', 'acq', 'valo', 'sensi', 'cf_ra', 'quality_legacy', 'quality_target', 'root_cause_application', 'root_cause_type', 'xva_remarks', 'closing', 'iteration', 'reg_issue', 'action_taken_and_update', 'reg_status', 'reg_prb', 'reg_hiim', 'backlog_item', 'actions'];
     
     // Add any missing columns to the end (before actions)
     const missingColumns = allColumns.filter(col => !columnOrder.includes(col));
