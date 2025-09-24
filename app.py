@@ -313,25 +313,32 @@ def get_entries():
         prb_only = request.args.get('prb_only', 'false').lower() == 'true'
         hiim_only = request.args.get('hiim_only', 'false').lower() == 'true'
         
-        # Get all entries from SharePoint SQLite database
-        all_entries = entry_manager.get_all_entries()
+        # Get entries - either from specific application database or all databases
+        if application:
+            # Get entries from specific application database with date filtering
+            all_entries = entry_manager.get_entries_by_application(application, start_date, end_date)
+        else:
+            # Get all entries from all databases
+            all_entries = entry_manager.get_all_entries()
         
-        # Apply filters
+        # Apply remaining filters (non-date, non-application filters)
         filtered_entries = []
         for entry in all_entries:
-            # Date filters
-            if start_date:
-                entry_date = convert_date_string(entry.get('date', ''))
-                if entry_date < datetime.strptime(start_date, '%Y-%m-%d').date():
-                    continue
-            if end_date:
-                entry_date = convert_date_string(entry.get('date', ''))
-                if entry_date > datetime.strptime(end_date, '%Y-%m-%d').date():
-                    continue
+            # Date filters (only needed if not already filtered at database level)
+            if not application:  # Only apply date filters if we got all entries
+                if start_date:
+                    entry_date = convert_date_string(entry.get('date', ''))
+                    if entry_date < datetime.strptime(start_date, '%Y-%m-%d').date():
+                        continue
+                if end_date:
+                    entry_date = convert_date_string(entry.get('date', ''))
+                    if entry_date > datetime.strptime(end_date, '%Y-%m-%d').date():
+                        continue
             
-            # Application filter
-            if application:
-                if application.lower() not in entry.get('application_name', '').lower():
+            # Application filter (only needed if we got all entries)
+            if not application and 'application' in request.args:
+                requested_app = request.args.get('application')
+                if requested_app.lower() not in entry.get('application_name', '').lower():
                     continue
             
             # Quality status filter
@@ -367,7 +374,9 @@ def get_entries():
 def get_entry(entry_id):
     """Get a specific production entry by ID"""
     try:
-        entry = entry_manager.get_entry_by_id(entry_id)
+        # Try to get application from query param for more efficient lookup
+        application = request.args.get('application')
+        entry = entry_manager.get_entry_by_id(entry_id, application)
         if entry:
             return jsonify(entry)
         else:
@@ -387,14 +396,14 @@ def create_entry():
         if not is_valid:
             return jsonify({'error': error_msg}), 400
         
-        # Check if entry already exists for this date and application
+        # Check if entry already exists for this date and application in the specific database
         entry_date = convert_date_string(data['date'])
-        all_entries = entry_manager.get_all_entries()
+        application_name = data['application_name']
+        existing_entries = entry_manager.get_entries_by_application(application_name)
         
-        for existing_entry in all_entries:
-            if (existing_entry.get('date') == data['date'] and 
-                existing_entry.get('application_name') == data['application_name']):
-                return jsonify({'error': f'An entry already exists for {data["application_name"]} on {data["date"]}'}), 400
+        for existing_entry in existing_entries:
+            if existing_entry.get('date') == data['date']:
+                return jsonify({'error': f'An entry already exists for {application_name} on {data["date"]}'}), 400
         
         # Create new entry
         entry = entry_manager.create_entry(data)
@@ -414,22 +423,23 @@ def update_entry(entry_id):
         data = request.get_json()
         print(f"API update_entry called for id={entry_id} with data:", data)
         
-        # Get existing entry
+        # Get existing entry - search all databases
         existing_entry = entry_manager.get_entry_by_id(entry_id)
         if not existing_entry:
             return jsonify({'error': 'Entry not found'}), 404
         
+        existing_application = existing_entry.get('application_name')
+        
         # Check for duplicate entry if date or application is being changed
         if 'date' in data or 'application_name' in data:
             new_date = data.get('date', existing_entry.get('date'))
-            new_application = data.get('application_name', existing_entry.get('application_name'))
+            new_application = data.get('application_name', existing_application)
             
             # Check if another entry exists for this date and application (excluding current entry)
-            all_entries = entry_manager.get_all_entries()
-            for entry in all_entries:
-                if (entry.get('id') != entry_id and 
-                    entry.get('date') == new_date and 
-                    entry.get('application_name') == new_application):
+            # Look in the appropriate database
+            app_entries = entry_manager.get_entries_by_application(new_application)
+            for entry in app_entries:
+                if (entry.get('id') != entry_id and entry.get('date') == new_date):
                     return jsonify({'error': f'An entry already exists for {new_application} on {new_date}'}), 400
         
         # Validate entry data using the updated validation function
@@ -440,8 +450,8 @@ def update_entry(entry_id):
         if not is_valid:
             return jsonify({'error': error_message}), 400
         
-        # Update entry
-        updated_entry = entry_manager.update_entry(entry_id, data)
+        # Update entry - pass the application name for database targeting
+        updated_entry = entry_manager.update_entry(entry_id, data, existing_application)
         
         if updated_entry:
             return jsonify(updated_entry)
@@ -456,6 +466,7 @@ def update_entry(entry_id):
 def delete_entry(entry_id):
     """Delete a production entry"""
     try:
+        # Delete entry - the method will search all databases automatically
         success = entry_manager.delete_entry(entry_id)
         if success:
             return jsonify({'message': 'Entry deleted successfully'})

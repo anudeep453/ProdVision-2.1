@@ -288,15 +288,26 @@ class SharePointSQLiteAdapter:
         except Exception as e:
             return False
     
-    def get_entries_by_application(self, application_name: str) -> List[Dict]:
-        """Get entries for specific application"""
+    def get_entries_by_application(self, application_name: str, start_date: str = None, end_date: str = None) -> List[Dict]:
+        """Get entries for specific application with optional date filtering"""
         conn = self.get_connection()
         cursor = conn.cursor()
         
-        cursor.execute('''
-            SELECT * FROM entries WHERE application_name = ?
-            ORDER BY created_at DESC
-        ''', (application_name,))
+        # Build query with optional date filtering
+        query = "SELECT * FROM entries WHERE application_name = ?"
+        params = [application_name]
+        
+        if start_date:
+            query += " AND date >= ?"
+            params.append(start_date)
+        
+        if end_date:
+            query += " AND date <= ?"
+            params.append(end_date)
+        
+        query += " ORDER BY created_at DESC"
+        
+        cursor.execute(query, params)
         
         columns = [description[0] for description in cursor.description]
         entries = []
@@ -683,42 +694,143 @@ class SharePointSQLiteAdapter:
             return False
 
 
-# Production Entry Manager for backward compatibility
+# Database factory for different application types
+class DatabaseAdapterFactory:
+    """Factory to create appropriate database adapters for different application types"""
+    
+    # Mapping of application names to database files
+    DB_MAPPING = {
+        'CVAR ALL': 'cvar_all.db',
+        'CVAR NYQ': 'cvar_nyq.db', 
+        'XVA': 'xva.db',
+        'REG': 'reg.db'
+    }
+    
+    _adapters = {}  # Cache for adapters
+    
+    @classmethod
+    def get_adapter(cls, application_name: str, sharepoint_url: str = None) -> SharePointSQLiteAdapter:
+        """Get or create adapter for specific application type"""
+        if not sharepoint_url:
+            sharepoint_url = "https://groupsg001.sharepoint.com/sites/CCRTeam/Shared%20Documents/ProdVision"
+        
+        # Normalize application name
+        app_name = application_name.upper().strip()
+        
+        # Get database filename
+        db_filename = cls.DB_MAPPING.get(app_name, 'prodvision.db')  # fallback to original
+        
+        # Use cached adapter if exists
+        cache_key = f"{app_name}_{db_filename}"
+        if cache_key in cls._adapters:
+            return cls._adapters[cache_key]
+        
+        # Create new adapter
+        adapter = SharePointSQLiteAdapter(sharepoint_url, db_filename)
+        cls._adapters[cache_key] = adapter
+        
+        return adapter
+    
+    @classmethod
+    def get_all_adapters(cls, sharepoint_url: str = None) -> Dict[str, SharePointSQLiteAdapter]:
+        """Get all adapters for all application types"""
+        adapters = {}
+        for app_name in cls.DB_MAPPING.keys():
+            adapters[app_name] = cls.get_adapter(app_name, sharepoint_url)
+        return adapters
+
+
+# Production Entry Manager with multi-database support
 class ProductionEntryManagerWorking:
-    """Production Entry Manager using SharePoint SQLite adapter"""
+    """Production Entry Manager using multiple SharePoint SQLite adapters"""
     
     def __init__(self, sharepoint_url: str = None):
         if not sharepoint_url:
             sharepoint_url = "https://groupsg001.sharepoint.com/sites/CCRTeam/Shared%20Documents/ProdVision"
-        self.adapter = SharePointSQLiteAdapter(sharepoint_url)
+        self.sharepoint_url = sharepoint_url
+        self.factory = DatabaseAdapterFactory()
+        
+        # Keep a reference to the main adapter for backward compatibility
+        self.adapter = DatabaseAdapterFactory.get_adapter('CVAR ALL', sharepoint_url)
+    
+    def get_adapter_for_application(self, application_name: str) -> SharePointSQLiteAdapter:
+        """Get the appropriate adapter for a specific application"""
+        return self.factory.get_adapter(application_name, self.sharepoint_url)
+    
+    def get_entries_by_application(self, application_name: str, start_date: str = None, end_date: str = None) -> List[Dict]:
+        """Get entries for a specific application from its dedicated database"""
+        adapter = self.get_adapter_for_application(application_name)
+        return adapter.get_entries_by_application(application_name, start_date, end_date)
     
     def get_all_entries(self) -> List[Dict]:
         """Get all production entries from all applications"""
-        return self.adapter.get_all_entries()
+        all_entries = []
+        for app_name in DatabaseAdapterFactory.DB_MAPPING.keys():
+            adapter = self.get_adapter_for_application(app_name)
+            entries = adapter.get_entries_by_application(app_name)
+            all_entries.extend(entries)
+        
+        # Sort by created_at descending
+        all_entries.sort(key=lambda x: x.get('created_at', ''), reverse=True)
+        return all_entries
     
     def create_entry(self, entry_data: Dict) -> Optional[Dict]:
-        """Create a new production entry"""
-        return self.adapter.create_entry(entry_data)
+        """Create a new production entry in the appropriate database"""
+        application_name = entry_data.get('application_name', 'CVAR ALL')
+        adapter = self.get_adapter_for_application(application_name)
+        return adapter.create_entry(entry_data)
     
-    def get_entry_by_id(self, entry_id: int) -> Optional[Dict]:
-        """Get a specific entry by ID"""
-        return self.adapter.get_entry_by_id(entry_id)
+    def get_entry_by_id(self, entry_id: int, application_name: str = None) -> Optional[Dict]:
+        """Get a specific entry by ID from the appropriate database"""
+        if application_name:
+            adapter = self.get_adapter_for_application(application_name)
+            return adapter.get_entry_by_id(entry_id)
+        
+        # If no application specified, search all databases
+        for app_name in DatabaseAdapterFactory.DB_MAPPING.keys():
+            adapter = self.get_adapter_for_application(app_name)
+            entry = adapter.get_entry_by_id(entry_id)
+            if entry:
+                return entry
+        return None
     
-    def update_entry(self, entry_id: int, update_data: Dict) -> Optional[Dict]:
-        """Update an existing entry"""
-        return self.adapter.update_entry(entry_id, update_data)
+    def update_entry(self, entry_id: int, update_data: Dict, application_name: str = None) -> Optional[Dict]:
+        """Update an existing entry in the appropriate database"""
+        if application_name:
+            adapter = self.get_adapter_for_application(application_name)
+            return adapter.update_entry(entry_id, update_data)
+        
+        # If no application specified, search all databases
+        for app_name in DatabaseAdapterFactory.DB_MAPPING.keys():
+            adapter = self.get_adapter_for_application(app_name)
+            entry = adapter.get_entry_by_id(entry_id)
+            if entry:
+                return adapter.update_entry(entry_id, update_data)
+        return None
     
-    def delete_entry(self, entry_id: int) -> bool:
-        """Delete an entry"""
-        return self.adapter.delete_entry(entry_id)
+    def delete_entry(self, entry_id: int, application_name: str = None) -> bool:
+        """Delete an entry from the appropriate database"""
+        if application_name:
+            adapter = self.get_adapter_for_application(application_name)
+            return adapter.delete_entry(entry_id)
+        
+        # If no application specified, search all databases
+        for app_name in DatabaseAdapterFactory.DB_MAPPING.keys():
+            adapter = self.get_adapter_for_application(app_name)
+            entry = adapter.get_entry_by_id(entry_id)
+            if entry:
+                return adapter.delete_entry(entry_id)
+        return False
     
-    def get_setting(self, key: str) -> Optional[str]:
-        """Get a setting value"""
-        return self.adapter.get_setting(key)
+    def get_setting(self, key: str, application_name: str = 'CVAR ALL') -> Optional[str]:
+        """Get a setting value from the appropriate database"""
+        adapter = self.get_adapter_for_application(application_name)
+        return adapter.get_setting(key)
     
-    def set_setting(self, key: str, value: str) -> bool:
-        """Set a setting value"""
-        return self.adapter.set_setting(key, value)
+    def set_setting(self, key: str, value: str, application_name: str = 'CVAR ALL') -> bool:
+        """Set a setting value in the appropriate database"""
+        adapter = self.get_adapter_for_application(application_name)
+        return adapter.set_setting(key, value)
     
     def _ensure_datasets_exist(self) -> bool:
         """Ensure all database tables exist - they are created automatically"""
