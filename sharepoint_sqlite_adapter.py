@@ -72,6 +72,14 @@ class SharePointSQLiteAdapter:
                 reg_prb TEXT,
                 reg_hiim TEXT,
                 backlog_item TEXT,
+                -- OTHERS-specific columns
+                dare TEXT,
+                timings TEXT,
+                puntuality_issue TEXT,
+                quality TEXT,
+                quality_issue TEXT,
+                others_prb TEXT,
+                others_hiim TEXT,
                 created_at TEXT,
                 updated_at TEXT
             )
@@ -144,6 +152,9 @@ class SharePointSQLiteAdapter:
 
             # List of columns that should exist
             required_columns = {
+                'quality_status': 'TEXT',
+                'quality_legacy': 'TEXT',
+                'quality_target': 'TEXT',
                 'prb_link': 'TEXT',
                 'hiim_link': 'TEXT',
                 'valo_text': 'TEXT',
@@ -159,7 +170,15 @@ class SharePointSQLiteAdapter:
                 'reg_status': 'TEXT',
                 'reg_prb': 'TEXT',
                 'reg_hiim': 'TEXT',
-                'backlog_item': 'TEXT'
+                'backlog_item': 'TEXT',
+                # OTHERS-specific columns
+                'dare': 'TEXT',
+                'timings': 'TEXT',
+                'puntuality_issue': 'TEXT',
+                'quality': 'TEXT',
+                'quality_issue': 'TEXT',
+                'others_prb': 'TEXT',
+                'others_hiim': 'TEXT'
             }
 
             # Add missing columns
@@ -405,8 +424,9 @@ class SharePointSQLiteAdapter:
                     prb_id_number, prb_id_status, hiim_id_number, hiim_id_status,
                     valo_text, valo_status, sensi_text, sensi_status, cf_ra_text, cf_ra_status,
                     acq_text, root_cause_application, root_cause_type, issue_description, remarks,
-                    created_at, updated_at, prb_link, hiim_link, xva_remarks
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    created_at, updated_at, prb_link, hiim_link, xva_remarks,
+                    dare, timings, puntuality_issue, quality, quality_issue, others_prb, others_hiim
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 entry_data.get('date', ''),
                 entry_data.get('day', ''),
@@ -437,7 +457,14 @@ class SharePointSQLiteAdapter:
                 now,
                 entry_data.get('prb_link', ''),
                 entry_data.get('hiim_link', ''),
-                entry_data.get('xva_remarks', '')
+                entry_data.get('xva_remarks', ''),
+                entry_data.get('dare', ''),
+                entry_data.get('timings', ''),
+                entry_data.get('puntuality_issue', ''),
+                entry_data.get('quality', ''),
+                entry_data.get('quality_issue', ''),
+                entry_data.get('others_prb', ''),
+                entry_data.get('others_hiim', '')
             ))
             
             # Get the inserted ID
@@ -703,7 +730,8 @@ class DatabaseAdapterFactory:
         'CVAR ALL': 'cvar_all.db',
         'CVAR NYQ': 'cvar_nyq.db', 
         'XVA': 'xva.db',
-        'REG': 'reg.db'
+        'REG': 'reg.db',
+        'OTHERS': 'others.db'
     }
     
     _adapters = {}  # Cache for adapters

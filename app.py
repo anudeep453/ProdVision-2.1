@@ -223,6 +223,10 @@ def validate_entry_data(data):
             if reg_status_val not in valid_reg_statuses:
                 return False, 'Invalid REG status'
         # Skip CVAR/XVA-specific validation for REG entries
+    elif application_name == 'OTHERS':
+        # OTHERS-specific validation - only date and application_name are required
+        # All other fields (DARE, TIMINGS, PUNTUALITY_ISSUE, QUALITY, QUALITY_ISSUE, PRB, HIIM) are optional
+        pass
     else:
         # CVAR-specific validation - validate single fields or arrays
         if data.get('prc_mail_status') and data['prc_mail_status'] not in ['Red', 'Yellow', 'Green']:

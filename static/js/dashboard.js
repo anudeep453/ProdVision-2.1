@@ -27,11 +27,13 @@ const entryModal = document.getElementById('entry-modal');
 const cvarEntryForm = document.getElementById('cvar-entry-form');
 const xvaEntryForm = document.getElementById('xva-entry-form');
 const regEntryForm = document.getElementById('reg-entry-form');
+const othersEntryForm = document.getElementById('others-entry-form');
 const modalTitle = document.getElementById('modal-title');
 let addEntryBtn;
 const cancelCvarEntryBtn = document.getElementById('cancel-cvar-entry');
 const cancelXvaEntryBtn = document.getElementById('cancel-xva-entry');
 const cancelRegEntryBtn = document.getElementById('cancel-reg-entry');
+const cancelOthersEntryBtn = document.getElementById('cancel-others-entry');
 const closeBtns = document.querySelectorAll('.close');
 
 const filters = {
@@ -158,9 +160,11 @@ function setupEventListeners() {
     cvarEntryForm.addEventListener('submit', handleCVAREntrySubmit);
     xvaEntryForm.addEventListener('submit', handleXVAEntrySubmit);
     regEntryForm.addEventListener('submit', handleREGEntrySubmit);
+    othersEntryForm.addEventListener('submit', handleOTHERSEntrySubmit);
     cancelCvarEntryBtn.addEventListener('click', hideEntryModal);
     cancelXvaEntryBtn.addEventListener('click', hideEntryModal);
     cancelRegEntryBtn.addEventListener('click', hideEntryModal);
+    cancelOthersEntryBtn.addEventListener('click', hideEntryModal);
     
     // Time formatting for PRC Mail and CP Alerts
     setupTimeFormatting();
@@ -556,6 +560,9 @@ function getVisibleColumnsForApplication(application) {
     // Define columns to show only for REG (REG-specific columns - completely separate)
     const regOnlyColumns = ['closing', 'iteration', 'reg_issue', 'action_taken_and_update', 'reg_status', 'reg_prb', 'reg_hiim', 'backlog_item'];
     
+    // Define columns to show only for OTHERS
+    const othersOnlyColumns = ['dare', 'timings', 'puntuality_issue', 'quality', 'quality_issue', 'others_prb', 'others_hiim'];
+    
     // Standard columns that are always visible (for CVAR/XVA only)
     const standardColumns = ['date', 'day', 'issue_description', 'prb_id', 'hiim_id'];
     
@@ -568,16 +575,20 @@ function getVisibleColumnsForApplication(application) {
     } else if (application === 'REG') {
         // For REG, show only date, day + REG-specific columns + actions (completely separate)
         return ['date', 'day', ...regOnlyColumns, ...actionsColumn];
+    } else if (application === 'OTHERS') {
+        // For OTHERS, show only date, day + OTHERS-specific columns + actions
+        return ['date', 'day', ...othersOnlyColumns, ...actionsColumn];
     } else {
         // For CVAR ALL and CVAR NYQ, show standard columns + original columns + actions
-        const originalColumns = ['prc_mail', 'cp_alerts', 'quality', 'remarks'];
+        // For CVAR, the Quality column comes from `quality_status`
+        const originalColumns = ['prc_mail', 'cp_alerts', 'quality_status', 'remarks'];
         return [...standardColumns, ...originalColumns, ...actionsColumn];
     }
 }
 
 function toggleColumnsForApplication(application) {
     // Define columns to hide for XVA (old columns)
-    const xvaHiddenColumns = ['prc_mail', 'cp_alerts', 'quality', 'remarks'];
+    const xvaHiddenColumns = ['prc_mail', 'cp_alerts', 'quality_status', 'remarks'];
     
     // Define columns to show only for XVA (new XVA-specific columns)
     const xvaOnlyColumns = ['acq', 'valo', 'sensi', 'cf_ra', 'quality_legacy', 'quality_target', 'root_cause_application', 'root_cause_type', 'xva_remarks'];
@@ -585,8 +596,14 @@ function toggleColumnsForApplication(application) {
     // Define columns to show only for REG (REG-specific columns - completely separate)
     const regOnlyColumns = ['closing', 'iteration', 'reg_issue', 'action_taken_and_update', 'reg_status', 'reg_prb', 'reg_hiim', 'backlog_item'];
     
+    // Define columns to show only for OTHERS
+    const othersOnlyColumns = ['dare', 'timings', 'puntuality_issue', 'quality', 'quality_issue', 'others_prb', 'others_hiim'];
+    
     // Define columns to hide for REG (all CVAR/XVA columns)
-    const regHiddenColumns = ['prc_mail', 'cp_alerts', 'quality', 'remarks', 'issue_description', 'prb_id', 'hiim_id', ...xvaOnlyColumns];
+    const regHiddenColumns = ['prc_mail', 'cp_alerts', 'quality_status', 'remarks', 'issue_description', 'prb_id', 'hiim_id', ...xvaOnlyColumns, ...othersOnlyColumns];
+    
+    // Define columns to hide for OTHERS (all CVAR/XVA/REG columns)
+    const othersHiddenColumns = ['prc_mail', 'cp_alerts', 'quality_status', 'remarks', 'issue_description', 'prb_id', 'hiim_id', ...xvaOnlyColumns, ...regOnlyColumns];
     
     // Get all table headers
     const headers = document.querySelectorAll('#entries-table thead th');
@@ -601,7 +618,7 @@ function toggleColumnsForApplication(application) {
         
         if (application === 'XVA') {
             // Hide old columns and show XVA-specific columns
-            if (xvaHiddenColumns.includes(column) || regOnlyColumns.includes(column)) {
+            if (xvaHiddenColumns.includes(column) || regOnlyColumns.includes(column) || othersOnlyColumns.includes(column)) {
                 header.style.display = 'none';
             } else if (xvaOnlyColumns.includes(column)) {
                 header.style.display = '';
@@ -610,7 +627,7 @@ function toggleColumnsForApplication(application) {
                 header.style.display = '';
             }
         } else if (application === 'REG') {
-            // Hide all CVAR/XVA columns and show only REG-specific columns + date/day
+            // Hide all CVAR/XVA/OTHERS columns and show only REG-specific columns + date/day
             if (regHiddenColumns.includes(column)) {
                 header.style.display = 'none';
             } else if (regOnlyColumns.includes(column)) {
@@ -622,9 +639,22 @@ function toggleColumnsForApplication(application) {
                 // Hide all other columns for REG
                 header.style.display = 'none';
             }
+        } else if (application === 'OTHERS') {
+            // Hide all CVAR/XVA/REG columns and show only OTHERS-specific columns + date/day
+            if (othersHiddenColumns.includes(column)) {
+                header.style.display = 'none';
+            } else if (othersOnlyColumns.includes(column)) {
+                header.style.display = '';
+            } else if (column === 'date' || column === 'day') {
+                // Show only date and day from standard columns
+                header.style.display = '';
+            } else {
+                // Hide all other columns for OTHERS
+                header.style.display = 'none';
+            }
         } else {
-            // For CVAR ALL and CVAR NYQ, hide XVA and REG-specific columns and show CVAR columns
-            if (xvaOnlyColumns.includes(column) || regOnlyColumns.includes(column)) {
+            // For CVAR ALL and CVAR NYQ, hide XVA, REG, and OTHERS-specific columns and show CVAR columns
+            if (xvaOnlyColumns.includes(column) || regOnlyColumns.includes(column) || othersOnlyColumns.includes(column)) {
                 header.style.display = 'none';
             } else {
                 header.style.display = '';
@@ -1884,6 +1914,15 @@ function createEntryRow(entry, isFirstRow, itemType, entryId, childCount) {
     const regPrbDisplay = isFirstRow ? (entry.reg_prb || 'N/A') : '';
     const regHiimDisplay = isFirstRow ? (entry.reg_hiim || 'N/A') : '';
     const backlogItemDisplay = isFirstRow ? (entry.backlog_item || 'N/A') : '';
+    
+    // OTHERS display variables
+    const dareDisplay = isFirstRow ? (entry.dare || 'N/A') : '';
+    const timingsDisplay = isFirstRow ? (entry.timings || 'N/A') : '';
+    const puntualityIssueDisplay = isFirstRow ? (entry.puntuality_issue || 'N/A') : '';
+    const othersQualityDisplay = isFirstRow ? (entry.quality || 'N/A') : '';
+    const qualityIssueDisplay = isFirstRow ? (entry.quality_issue || 'N/A') : '';
+    const othersPrbDisplay = isFirstRow ? (entry.others_prb || 'N/A') : '';
+    const othersHiimDisplay = isFirstRow ? (entry.others_hiim || 'N/A') : '';
 
     // Render all columns in the current order as defined by columnOrder and add data-column for robustness
     const columnContent = {
@@ -1891,7 +1930,7 @@ function createEntryRow(entry, isFirstRow, itemType, entryId, childCount) {
         day: { html: dayOfWeek, cls: 'day-column' },
         prc_mail: { html: prcMailDisplay, cls: 'common-field' },
         cp_alerts: { html: cpAlertsDisplay, cls: 'common-field' },
-        quality: { html: qualityDisplay, cls: 'common-field' },
+    quality_status: { html: qualityDisplay, cls: 'common-field' },
         issue_description: { html: issuesDisplay, cls: 'item-field' },
         prb_id: { html: prbDisplay, cls: 'item-field' },
         hiim_id: { html: hiimDisplay, cls: 'item-field' },
@@ -1914,13 +1953,21 @@ function createEntryRow(entry, isFirstRow, itemType, entryId, childCount) {
         reg_prb: { html: regPrbDisplay, cls: 'common-field' },
         reg_hiim: { html: regHiimDisplay, cls: 'common-field' },
         backlog_item: { html: backlogItemDisplay, cls: 'common-field' },
+        // OTHERS columns
+        dare: { html: dareDisplay, cls: 'common-field' },
+        timings: { html: timingsDisplay, cls: 'common-field' },
+        puntuality_issue: { html: puntualityIssueDisplay, cls: 'common-field' },
+    quality: { html: othersQualityDisplay, cls: 'common-field' },
+        quality_issue: { html: qualityIssueDisplay, cls: 'common-field' },
+        others_prb: { html: othersPrbDisplay, cls: 'common-field' },
+        others_hiim: { html: othersHiimDisplay, cls: 'common-field' },
         actions: { html: actionsDisplay, cls: 'edit-column' }
     };
 
     // Fallback if columnOrder is not initialized
     const order = (typeof columnOrder !== 'undefined' && Array.isArray(columnOrder) && columnOrder.length)
         ? columnOrder
-    : ['date', 'day', 'prc_mail', 'cp_alerts', 'quality', 'issue_description', 'prb_id', 'hiim_id', 'remarks', 'acq', 'valo', 'sensi', 'cf_ra', 'quality_legacy', 'quality_target', 'root_cause_application', 'root_cause_type', 'xva_remarks', 'closing', 'iteration', 'reg_issue', 'action_taken_and_update', 'reg_status', 'reg_prb', 'reg_hiim', 'backlog_item', 'actions'];
+    : ['date', 'day', 'prc_mail', 'cp_alerts', 'quality', 'issue_description', 'prb_id', 'hiim_id', 'remarks', 'acq', 'valo', 'sensi', 'cf_ra', 'quality_legacy', 'quality_target', 'root_cause_application', 'root_cause_type', 'xva_remarks', 'closing', 'iteration', 'reg_issue', 'action_taken_and_update', 'reg_status', 'reg_prb', 'reg_hiim', 'backlog_item', 'dare', 'timings', 'puntuality_issue', 'quality', 'quality_issue', 'others_prb', 'others_hiim', 'actions'];
 
     // Only render cells for columns intended to be visible for the current application.
     const visibleSet = new Set(getVisibleColumnsForApplication(filters.application));
@@ -2772,6 +2819,7 @@ function showEntryModal(entry = null) {
         cvarEntryForm.style.display = 'none';
         xvaEntryForm.style.display = 'block';
         regEntryForm.style.display = 'none';
+        othersEntryForm.style.display = 'none';
         
         if (entry) {
             modalTitle.textContent = 'Edit XVA Entry';
@@ -2792,6 +2840,7 @@ function showEntryModal(entry = null) {
         cvarEntryForm.style.display = 'none';
         xvaEntryForm.style.display = 'none';
         regEntryForm.style.display = 'block';
+        othersEntryForm.style.display = 'none';
         
         if (entry) {
             modalTitle.textContent = 'Edit REG Entry';
@@ -2808,9 +2857,31 @@ function showEntryModal(entry = null) {
                 showWeekendWarning();
             }
         }
+    } else if (filters.application === 'OTHERS') {
+        cvarEntryForm.style.display = 'none';
+        xvaEntryForm.style.display = 'none';
+        regEntryForm.style.display = 'none';
+        othersEntryForm.style.display = 'block';
+        
+        if (entry) {
+            modalTitle.textContent = 'Edit OTHERS Entry';
+            populateOTHERSEntryForm(entry);
+        } else {
+            modalTitle.textContent = 'Add New OTHERS Entry';
+            othersEntryForm.reset();
+            // Set default date based on current day
+            const defaultDate = getDefaultEntryDate();
+            document.getElementById('others-entry-date').value = defaultDate;
+            
+            // Check if the default date is a weekend and show warning
+            if (isWeekend(defaultDate)) {
+                showWeekendWarning();
+            }
+        }
     } else {
         xvaEntryForm.style.display = 'none';
         regEntryForm.style.display = 'none';
+        othersEntryForm.style.display = 'none';
         cvarEntryForm.style.display = 'block';
         
         if (entry) {
@@ -3025,6 +3096,17 @@ function populateREGEntryForm(entry) {
     setTimeout(() => {
         setupStatusSelectStyling();
     }, 100);
+}
+
+function populateOTHERSEntryForm(entry) {
+    document.getElementById('others-entry-date').value = entry.date;
+    document.getElementById('others-entry-dare').value = entry.dare || '';
+    document.getElementById('others-entry-timings').value = entry.timings || '';
+    document.getElementById('others-entry-puntuality-issue').value = entry.puntuality_issue || '';
+    document.getElementById('others-entry-quality').value = entry.quality || '';
+    document.getElementById('others-entry-quality-issue').value = entry.quality_issue || '';
+    document.getElementById('others-entry-prb').value = entry.others_prb || '';
+    document.getElementById('others-entry-hiim').value = entry.others_hiim || '';
 }
 
 // Populate the new combined item cards UI from an entry object's issues/prbs/hiims
@@ -3940,6 +4022,55 @@ async function handleREGEntrySubmit(event) {
     } catch (error) {
         console.error('Error saving REG entry:', error);
         alert('Failed to save REG entry. Please try again.');
+    }
+}
+
+async function handleOTHERSEntrySubmit(event) {
+    event.preventDefault();
+    
+    const formData = new FormData(othersEntryForm);
+    
+    // Build OTHERS entry data using only OTHERS fields and user input
+    const entryData = {
+        date: formData.get('date'),
+        day: new Date(formData.get('date')).toLocaleDateString('en-US', { weekday: 'long' }),
+        application_name: 'OTHERS',
+        dare: formData.get('dare'),
+        timings: formData.get('timings'),
+        puntuality_issue: formData.get('puntuality_issue'),
+        quality: formData.get('quality'),
+        quality_issue: formData.get('quality_issue'),
+        others_prb: formData.get('others_prb'),
+        others_hiim: formData.get('others_hiim')
+    };
+    
+    try {
+        const url = currentEntryId ? `/api/entries/${currentEntryId}` : '/api/entries';
+        const method = currentEntryId ? 'PUT' : 'POST';
+        
+        const response = await fetch(url, {
+            method: method,
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            credentials: 'include',
+            body: JSON.stringify(entryData)
+        });
+        
+        if (response.ok) {
+            hideEntryModal();
+            loadData(); // Refresh data
+        } else {
+            const error = await response.json();
+            if (error.error && error.error.includes('already exists')) {
+                alert('Error: ' + error.error + '\n\nPlease edit the existing entry or choose a different date.');
+            } else {
+                alert('Error saving OTHERS entry: ' + error.error);
+            }
+        }
+    } catch (error) {
+        console.error('Error saving OTHERS entry:', error);
+        alert('Failed to save OTHERS entry. Please try again.');
     }
 }
 
@@ -5827,13 +5958,13 @@ window.editEntry = editEntry;
 window.deleteEntry = deleteEntry;
 
 // Column Reordering Functionality
-let columnOrder = ['date', 'day', 'prc_mail', 'cp_alerts', 'quality', 'issue_description', 'prb_id', 'hiim_id', 'remarks', 'acq', 'valo', 'sensi', 'cf_ra', 'quality_legacy', 'quality_target', 'root_cause_application', 'root_cause_type', 'xva_remarks', 'closing', 'iteration', 'reg_issue', 'action_taken_and_update', 'reg_status', 'reg_prb', 'reg_hiim', 'backlog_item', 'actions'];
+let columnOrder = ['date', 'day', 'prc_mail', 'cp_alerts', 'quality_status', 'issue_description', 'prb_id', 'hiim_id', 'remarks', 'acq', 'valo', 'sensi', 'cf_ra', 'quality_legacy', 'quality_target', 'root_cause_application', 'root_cause_type', 'xva_remarks', 'closing', 'iteration', 'reg_issue', 'action_taken_and_update', 'reg_status', 'reg_prb', 'reg_hiim', 'backlog_item', 'dare', 'timings', 'puntuality_issue', 'quality', 'quality_issue', 'others_prb', 'others_hiim', 'actions'];
 let draggedElement = null;
 let draggedIndex = -1;
 
 // Ensure all columns are included in the column order
 function ensureAllColumnsInOrder() {
-    const allColumns = ['date', 'day', 'prc_mail', 'cp_alerts', 'quality', 'issue_description', 'prb_id', 'hiim_id', 'remarks', 'acq', 'valo', 'sensi', 'cf_ra', 'quality_legacy', 'quality_target', 'root_cause_application', 'root_cause_type', 'xva_remarks', 'closing', 'iteration', 'reg_issue', 'action_taken_and_update', 'reg_status', 'reg_prb', 'reg_hiim', 'backlog_item', 'actions'];
+    const allColumns = ['date', 'day', 'prc_mail', 'cp_alerts', 'quality_status', 'issue_description', 'prb_id', 'hiim_id', 'remarks', 'acq', 'valo', 'sensi', 'cf_ra', 'quality_legacy', 'quality_target', 'root_cause_application', 'root_cause_type', 'xva_remarks', 'closing', 'iteration', 'reg_issue', 'action_taken_and_update', 'reg_status', 'reg_prb', 'reg_hiim', 'backlog_item', 'dare', 'timings', 'puntuality_issue', 'quality', 'quality_issue', 'others_prb', 'others_hiim', 'actions'];
     
     // Add any missing columns to the end (before actions)
     const missingColumns = allColumns.filter(col => !columnOrder.includes(col));
@@ -5855,7 +5986,7 @@ function initializeColumnReordering() {
         try {
             const savedColumnOrder = JSON.parse(savedOrder);
             // Check if saved order includes all current columns
-            const allColumns = ['date', 'day', 'prc_mail', 'cp_alerts', 'quality', 'issue_description', 'prb_id', 'hiim_id', 'remarks', 'acq', 'valo', 'sensi', 'cf_ra', 'quality_legacy', 'quality_target', 'root_cause_application', 'root_cause_type', 'xva_remarks', 'actions'];
+            const allColumns = ['date', 'day', 'prc_mail', 'cp_alerts', 'quality_status', 'issue_description', 'prb_id', 'hiim_id', 'remarks', 'acq', 'valo', 'sensi', 'cf_ra', 'quality_legacy', 'quality_target', 'root_cause_application', 'root_cause_type', 'xva_remarks', 'dare', 'timings', 'puntuality_issue', 'quality', 'quality_issue', 'others_prb', 'others_hiim', 'actions'];
             
             // If saved order is missing new columns, merge them
             const missingColumns = allColumns.filter(col => !savedColumnOrder.includes(col));

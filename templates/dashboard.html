@@ -63,6 +63,7 @@
                             <button type="button" class="filter-app-btn" data-app="CVAR NYQ">CVAR NYQ</button>
                             <button type="button" class="filter-app-btn" data-app="XVA">XVA</button>
                             <button type="button" class="filter-app-btn" data-app="REG">REG</button>
+                            <button type="button" class="filter-app-btn" data-app="OTHERS">OTHERS</button>
                         </div>
                         <button id="view-charts-btn" class="btn btn-info">View Charts</button>
                         <button id="add-entry-btn" class="btn btn-success" style="display: none;">Add New Entry</button>
@@ -163,7 +164,7 @@
                                 </span>
                                 <div class="column-resize-handle" title="Drag to resize column"></div>
                             </th>
-                            <th draggable="true" data-column="quality" class="draggable-header">
+                            <th draggable="true" data-column="quality_status" class="draggable-header">
                                 <span class="column-content">
                                     <span class="column-title">Quality</span>
                                     <span class="drag-handle">⋮⋮</span>
@@ -314,6 +315,56 @@
                             <th draggable="true" data-column="backlog_item" class="draggable-header">
                                 <span class="column-content">
                                     <span class="column-title">Backlog Item</span>
+                                    <span class="drag-handle">⋮⋮</span>
+                                </span>
+                                <div class="column-resize-handle" title="Drag to resize column"></div>
+                            </th>
+                            <!-- OTHERS-specific columns -->
+                            <th draggable="true" data-column="dare" class="draggable-header">
+                                <span class="column-content">
+                                    <span class="column-title">DARE</span>
+                                    <span class="drag-handle">⋮⋮</span>
+                                </span>
+                                <div class="column-resize-handle" title="Drag to resize column"></div>
+                            </th>
+                            <th draggable="true" data-column="timings" class="draggable-header">
+                                <span class="column-content">
+                                    <span class="column-title">TIMINGS</span>
+                                    <span class="drag-handle">⋮⋮</span>
+                                </span>
+                                <div class="column-resize-handle" title="Drag to resize column"></div>
+                            </th>
+                            <th draggable="true" data-column="puntuality_issue" class="draggable-header">
+                                <span class="column-content">
+                                    <span class="column-title">PUNTUALITY ISSUE</span>
+                                    <span class="drag-handle">⋮⋮</span>
+                                </span>
+                                <div class="column-resize-handle" title="Drag to resize column"></div>
+                            </th>
+                            <th draggable="true" data-column="quality" class="draggable-header">
+                                <span class="column-content">
+                                    <span class="column-title">QUALITY</span>
+                                    <span class="drag-handle">⋮⋮</span>
+                                </span>
+                                <div class="column-resize-handle" title="Drag to resize column"></div>
+                            </th>
+                            <th draggable="true" data-column="quality_issue" class="draggable-header">
+                                <span class="column-content">
+                                    <span class="column-title">QUALITY ISSUE</span>
+                                    <span class="drag-handle">⋮⋮</span>
+                                </span>
+                                <div class="column-resize-handle" title="Drag to resize column"></div>
+                            </th>
+                            <th draggable="true" data-column="others_prb" class="draggable-header">
+                                <span class="column-content">
+                                    <span class="column-title">PRB</span>
+                                    <span class="drag-handle">⋮⋮</span>
+                                </span>
+                                <div class="column-resize-handle" title="Drag to resize column"></div>
+                            </th>
+                            <th draggable="true" data-column="others_hiim" class="draggable-header">
+                                <span class="column-content">
+                                    <span class="column-title">HIIM</span>
                                     <span class="drag-handle">⋮⋮</span>
                                 </span>
                                 <div class="column-resize-handle" title="Drag to resize column"></div>
@@ -624,6 +675,54 @@
                 <div class="form-actions">
                     <button type="submit" class="btn btn-primary">Save Entry</button>
                     <button type="button" id="cancel-reg-entry" class="btn btn-secondary">Cancel</button>
+                </div>
+            </form>
+
+            <!-- OTHERS Form -->
+            <form id="others-entry-form" class="entry-form" style="display: none;">
+                <div class="form-group">
+                    <label for="others-entry-date">Date *</label>
+                    <input type="date" id="others-entry-date" name="date" required max="">
+                </div>
+                
+                <div class="form-group">
+                    <label for="others-entry-dare">DARE</label>
+                    <input type="text" id="others-entry-dare" name="dare" placeholder="Enter DARE">
+                </div>
+                
+                <div class="form-group">
+                    <label for="others-entry-timings">TIMINGS</label>
+                    <input type="text" id="others-entry-timings" name="timings" placeholder="Enter timings">
+                </div>
+                
+                <div class="form-group">
+                    <label for="others-entry-puntuality-issue">PUNTUALITY ISSUE</label>
+                    <textarea id="others-entry-puntuality-issue" name="puntuality_issue" rows="3" placeholder="Enter puntuality issue"></textarea>
+                </div>
+                
+                <div class="form-group">
+                    <label for="others-entry-quality">QUALITY</label>
+                    <input type="text" id="others-entry-quality" name="quality" placeholder="Enter quality">
+                </div>
+                
+                <div class="form-group">
+                    <label for="others-entry-quality-issue">QUALITY ISSUE</label>
+                    <textarea id="others-entry-quality-issue" name="quality_issue" rows="3" placeholder="Enter quality issue"></textarea>
+                </div>
+                
+                <div class="form-group">
+                    <label for="others-entry-prb">PRB</label>
+                    <input type="text" id="others-entry-prb" name="others_prb" placeholder="Enter PRB">
+                </div>
+                
+                <div class="form-group">
+                    <label for="others-entry-hiim">HIIM</label>
+                    <input type="text" id="others-entry-hiim" name="others_hiim" placeholder="Enter HIIM">
+                </div>
+                
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary">Save Entry</button>
+                    <button type="button" id="cancel-others-entry" class="btn btn-secondary">Cancel</button>
                 </div>
             </form>
         </div>
