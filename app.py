@@ -359,9 +359,10 @@ def get_entries():
         quality_status = request.args.get('quality_status')
         prb_only = request.args.get('prb_only', 'false').lower() == 'true'
         hiim_only = request.args.get('hiim_only', 'false').lower() == 'true'
+        time_loss_only = request.args.get('time_loss_only', 'false').lower() == 'true'
         
         # Determine if we need row-level filtering
-        use_row_level_filtering = prb_only or hiim_only
+        use_row_level_filtering = prb_only or hiim_only or time_loss_only
         row_type_filter = None
         
         if use_row_level_filtering:
@@ -369,6 +370,8 @@ def get_entries():
                 row_type_filter = 'prb'
             elif hiim_only:
                 row_type_filter = 'hiim'
+            elif time_loss_only:
+                row_type_filter = 'time_loss'
         
         # Get entries - use row-level filtering if needed
         if use_row_level_filtering:
@@ -569,6 +572,7 @@ def get_stats():
         quality_status = request.args.get('quality_status')
         prb_only = request.args.get('prb_only')
         hiim_only = request.args.get('hiim_only')
+        time_loss_only = request.args.get('time_loss_only')
         
         # Get monthly and yearly filters
         years = request.args.getlist('year')
@@ -609,6 +613,8 @@ def get_stats():
             if prb_only == 'true' and not entry.get('prb_id_number'):
                 continue
             if hiim_only == 'true' and not entry.get('hiim_id_number'):
+                continue
+            if time_loss_only == 'true' and not entry.get('time_loss'):
                 continue
             
             entries.append(entry)

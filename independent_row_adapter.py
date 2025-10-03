@@ -427,7 +427,7 @@ class IndependentRowSQLiteAdapter:
             query += " AND date <= ?"
             params.append(end_date)
         
-        # Add row type filter if specified (e.g., only PRB rows, only HIIM rows)
+        # Add row type filter if specified (e.g., only PRB rows, only HIIM rows, only Time Loss rows)
         if row_type_filter:
             if row_type_filter == 'prb':
                 query += " AND (row_type = 'prb' OR (row_type = 'main' AND prb_id_number IS NOT NULL AND prb_id_number != ''))"
@@ -435,6 +435,8 @@ class IndependentRowSQLiteAdapter:
                 query += " AND (row_type = 'hiim' OR (row_type = 'main' AND hiim_id_number IS NOT NULL AND hiim_id_number != ''))"
             elif row_type_filter == 'issue':
                 query += " AND (row_type = 'issue' OR (row_type = 'main' AND issue_description IS NOT NULL AND issue_description != ''))"
+            elif row_type_filter == 'time_loss':
+                query += " AND (time_loss IS NOT NULL AND time_loss != '')"
         
         query += " ORDER BY date DESC, grouping_key, row_position"
         

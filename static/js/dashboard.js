@@ -43,7 +43,8 @@ const filters = {
     endDate: document.getElementById('end-date'),
     application: 'CVAR ALL', // Default to CVAR ALL
     prbOnly: document.getElementById('prb-only'),
-    hiimOnly: document.getElementById('hiim-only')
+    hiimOnly: document.getElementById('hiim-only'),
+    timeLossOnly: document.getElementById('time-loss-only')
 };
 
 // Search elements
@@ -1271,6 +1272,7 @@ function buildQueryString() {
     if (filters.application) params.append('application', filters.application);
     if (filters.prbOnly.checked) params.append('prb_only', 'true');
     if (filters.hiimOnly.checked) params.append('hiim_only', 'true');
+    if (filters.timeLossOnly.checked) params.append('time_loss_only', 'true');
     
     return params.toString();
 }
@@ -1470,8 +1472,8 @@ function displayEntries(entries) {
         return;
     }
 
-    // Detect if we're in row-level filtering mode (PRB Only or HIIM Only)
-    const isRowLevelFiltering = filters.prbOnly.checked || filters.hiimOnly.checked;
+    // Detect if we're in row-level filtering mode (PRB Only, HIIM Only, or Time Loss Only)
+    const isRowLevelFiltering = filters.prbOnly.checked || filters.hiimOnly.checked || filters.timeLossOnly.checked;
     
     if (isRowLevelFiltering) {
         // Row-level filtering: Display each entry as an individual row without grouping/expansion
@@ -1489,7 +1491,7 @@ function displayEntries(entries) {
 
 function displayIndividualRows(entries) {
     /**
-     * Display individual rows for row-level filtering (PRB Only, HIIM Only)
+     * Display individual rows for row-level filtering (PRB Only, HIIM Only, Time Loss Only)
      * Each entry is treated as a separate row without grouping or expansion
      */
     
@@ -4551,6 +4553,7 @@ function clearFilters() {
     filters.endDate.value = '';
     filters.prbOnly.checked = false;
     filters.hiimOnly.checked = false;
+    filters.timeLossOnly.checked = false;
     
     // Reset application to CVAR ALL
     filters.application = 'CVAR ALL';
