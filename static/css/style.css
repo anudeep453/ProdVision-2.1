@@ -1410,6 +1410,164 @@ body {
     font-weight: 500;
 }
 
+/* Compact Entries Table Styling */
+#entries-table {
+    transform: scale(0.70);
+    transform-origin: top left;
+    width: 142.86%; /* 100% / 0.70 to compensate for scaling */
+    margin-bottom: -30%; /* Negative margin to reduce space taken by scaled element */
+}
+
+#entries-table th,
+#entries-table td {
+    font-size: 11px; /* Smaller font size for better readability at scaled size */
+    padding: 8px 12px; /* Slightly reduced padding */
+    line-height: 1.3; /* Tighter line height */
+}
+
+#entries-table th {
+    font-size: 10px; /* Even smaller for headers */
+    padding: 10px 8px;
+}
+
+/* Ensure issue description cells still wrap properly in compact mode */
+#entries-table td[data-column="issue_description"],
+#entries-table td:nth-child(6) {
+    font-size: 10px;
+    line-height: 1.2;
+}
+
+/* Compact Header Styling */
+.header {
+    transform: scale(0.75) !important;
+    transform-origin: top left !important;
+    width: 133.33% !important; /* 100% / 0.75 to compensate for scaling */
+    margin-bottom: -20px !important; /* Negative margin to reduce space taken by scaled element */
+    min-height: 60px !important; /* Reduced from 80px */
+    transition: none !important; /* Disable any transitions */
+    animation: none !important; /* Disable any animations */
+}
+
+.header .logo-svg {
+    width: 130px !important; /* Increased from 100px for bigger logo */
+    height: 130px !important; /* Increased from 100px for bigger logo */
+    animation: none !important; /* Disable gentle-pulse animation */
+    transition: none !important; /* Disable any transitions */
+    transform: none !important; /* Prevent any transform animations */
+}
+
+.header .center-title {
+    font-size: 1.4rem !important; /* Increased from 1.1rem back to original size */
+    animation: none !important; /* Disable any animations */
+    transition: none !important; /* Disable any transitions */
+    transform: none !important; /* Prevent any transform animations */
+}
+
+/* Compact Filters Styling */
+.filters {
+    transform: scale(0.75) !important;
+    transform-origin: top left !important;
+    width: 133.33% !important; /* 100% / 0.75 to compensate for scaling */
+    margin-bottom: -16px !important; /* Negative margin to reduce space taken by scaled element */
+    padding: 6px !important; /* Reduced from 8px */
+    transition: none !important; /* Disable any transitions */
+}
+
+/* Completely disable all hover effects on filters and children */
+.filters:hover,
+.filters:hover *,
+.filters *:hover {
+    transform: none !important;
+    box-shadow: none !important;
+    translate: none !important;
+    scale: none !important;
+    transition: none !important;
+}
+
+/* Force filters to maintain scale on hover */
+.filters:hover {
+    transform: scale(0.75) !important; /* Maintain scale on hover */
+}
+
+.filters .filter-group label {
+    font-size: 9px; /* Reduced from 11px */
+}
+
+.filters .filter-input {
+    padding: 4px 8px; /* Reduced from 6px 10px */
+    font-size: 10px; /* Reduced from 12px */
+}
+
+.filters .search-input {
+    padding: 8px 32px 8px 8px !important; /* Increased right padding even more for X button space */
+    font-size: 10px !important; /* Reduced from 12px */
+    min-width: 200px !important; /* Increased from 180px for even longer bar */
+    width: 200px !important; /* Fixed width to prevent expansion */
+    border-width: 2px !important; /* Ensure consistent border width */
+    box-sizing: border-box !important; /* Include border in width calculation */
+}
+
+/* Stabilize search input on hover and focus */
+.filters .search-input:hover,
+.filters .search-input:focus {
+    padding: 8px 32px 8px 8px !important; /* Maintain same padding with more space for X */
+    width: 200px !important; /* Maintain same longer width */
+    border-width: 2px !important; /* Maintain same border width */
+    box-sizing: border-box !important;
+}
+
+/* Position clear button properly inside the search bar */
+.filters .btn-clear-search {
+    position: absolute !important;
+    right: 8px !important; /* Moved further inside the bar */
+    top: 50% !important;
+    transform: translateY(-50%) !important;
+    width: 16px !important; /* Slightly smaller to fit better */
+    height: 16px !important; /* Slightly smaller to fit better */
+    font-size: 14px !important; /* Smaller font for better fit */
+}
+
+/* Prevent clear button from moving on hover/active */
+.filters .btn-clear-search:hover,
+.filters .btn-clear-search:active {
+    transform: translateY(-50%) !important; /* Remove scale effect */
+    right: 8px !important; /* Maintain position well inside bar */
+}
+
+.filters .filter-app-btn {
+    padding: 4px 10px; /* Reduced from 6px 12px */
+    font-size: 10px; /* Reduced from 12px */
+    min-width: 56px; /* Reduced from 70px */
+}
+
+.filters .filter-actions .btn {
+    padding: 4px 10px; /* Reduced from 6px 12px */
+    font-size: 10px; /* Reduced from 12px */
+}
+
+/* Compact Footer Styling - Override main footer styles */
+.footer {
+    transform: scale(0.9) !important;
+    transform-origin: bottom left !important;
+    width: 111.11% !important; /* 100% / 0.9 to compensate for scaling */
+    margin-top: -4px !important; /* Reduced negative margin for 90% scale */
+    height: 36px !important; /* Scaled down from 40px (40 * 0.9) */
+    position: relative !important;
+    overflow: visible !important; /* Allow content to be visible when scaled */
+    padding: 5px 18px !important; /* Scaled down padding */
+}
+
+.footer-content {
+    height: 100% !important;
+    min-height: 36px !important; /* Ensure minimum height for scaled content */
+}
+
+.footer-logo-small {
+    width: 65px !important; /* Increased from 55px for even bigger logo */
+    height: 65px !important;
+    max-height: 42px !important; /* Increased from 35px */
+}
+
 /* Modal Styles */
 .modal {
     position: fixed;
@@ -3307,9 +3465,9 @@ body {
 
 .footer-contact {
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
     align-items: center;
-    gap: 4px;
+    gap: 8px;
     text-align: center;
 }
 
@@ -3480,15 +3638,23 @@ body.edit-mode .add-entry-btn {
 }
 
 /* Hover effects for cards */
-.filters,
 .data-section {
     transition: all 0.3s ease;
 }
 
-.filters:hover,
 .data-section:hover {
     transform: translateY(-2px);
     box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
+}
+
+/* Disable hover effects for filters */
+.filters {
+    transition: none !important;
+}
+
+.filters:hover {
+    transform: none !important;
+    box-shadow: none !important;
 }
 
 
@@ -4343,4 +4509,40 @@ tr:not(.sub-row) + .sub-row td {
         min-width: 120px;
         max-width: 250px;
     }
+}
+
+/* FINAL OVERRIDE - Completely disable filter bar hover expansion */
+.filters,
+.filters:hover,
+.filters:active,
+.filters:focus {
+    transform: scale(0.75) !important;
+    transform-origin: top left !important;
+    transition: none !important;
+    animation: none !important;
+}
+
+.filters *,
+.filters *:hover,
+.filters *:active,
+.filters *:focus {
+    transition: none !important;
+    animation: none !important;
+}
+
+/* Prevent header zoom-in effect on page load */
+.header,
+.header *,
+.header .logo-svg,
+.header .center-title,
+.header .company-logo {
+    transition: none !important;
+    animation: none !important;
+    transform-style: flat !important;
+}
+
+/* Force immediate scaling without transition */
+.header {
+    transform: scale(0.75) !important;
+    transform-origin: top left !important;
 }
