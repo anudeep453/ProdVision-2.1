@@ -72,6 +72,9 @@
                         </div>
                         <button id="view-charts-btn" class="btn btn-info">View Charts</button>
                         <button id="add-entry-btn" class="btn btn-success" style="display: none;">Add New Entry</button>
+                        <button id="download-excel-btn" class="btn btn-download" title="Download Excel" style="display: none;">
+                            <img src="{{ url_for('static', filename='images/icons8-export-excel-48.png') }}" alt="Export Excel" width="30" height="30">
+                        </button>
                         <div class="search-group">
                             <input type="text" id="free-search" class="search-input" placeholder="Search anything...">
                             <button id="clear-search" class="btn btn-clear-search" title="Clear search">×</button>

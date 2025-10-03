@@ -15,11 +15,14 @@ elif sys.version_info >= (3, 8):
     print("This application is optimized for Python 3.7.0")
     print("Some features may not work as expected with newer versions")
 
-from flask import Flask, render_template, request, jsonify, session
+from flask import Flask, render_template, request, jsonify, session, send_file
 from flask_session import Session
 from datetime import datetime, timedelta
 import bcrypt
 from flask_cors import CORS
+import openpyxl
+from openpyxl.styles import Font, Alignment, PatternFill
+import io
 # Import new independent row adapter
 from independent_row_adapter import EntryManager as ProductionEntryManager
 from config import SECRET_KEY, DEBUG, HOST, PORT, SHAREPOINT_URL
@@ -560,6 +563,118 @@ def delete_entry(entry_id):
             return jsonify({'error': 'Entry not found or failed to delete'}), 404
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+@app.route('/api/download/excel')
+@require_auth
+def download_excel():
+    """Download current application dashboard data as Excel file with exact table structure"""
+    try:
+        # Get current application from request parameters
+        application = request.args.get('application', 'CVAR ALL')
+        start_date = request.args.get('start_date')
+        end_date = request.args.get('end_date')
+        
+        # Get entries for the selected application with any applied filters
+        if application == 'All Applications':
+            entries = entry_manager.get_all_entries()
+        else:
+            entries = entry_manager.get_entries_by_application(application, start_date, end_date)
+        
+        if not entries:
+            return jsonify({'error': f'No data available for {application}'}), 404
+        
+        # Create a new workbook and worksheet
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = f"{application} Dashboard Data"
+        
+        # Define column structure based on application (matching exactly what dashboard shows)
+        if application in ['CVAR ALL', 'CVAR NYQ']:
+            headers = ['Date', 'Day', 'PRC Mail', 'CP Alerts', 'Quality', 'Punctuality Issue Description', 'Time Loss', 'PRB ID', 'HIIM ID', 'Remarks']
+            field_mappings = [
+                'date', 'day', 
+                lambda e: f"{e.get('prc_mail_text', '')} {e.get('prc_mail_status', '')}".strip(),
+                lambda e: f"{e.get('cp_alerts_text', '')} {e.get('cp_alerts_status', '')}".strip(),
+                'quality_status', 'issue_description', 'time_loss', 'prb_id_number', 'hiim_id_number', 'remarks'
+            ]
+        elif application == 'XVA':
+            headers = ['Date', 'Day', 'Acq', 'Valo', 'Sensi', 'CF RA', 'Quality Legacy', 'Quality Target', 'Root Cause Application', 'Root Cause Type', 'XVA Remarks', 'PRB ID', 'HIIM ID', 'Time Loss']
+            field_mappings = [
+                'date', 'day', 
+                lambda e: f"{e.get('acq_text', '')} {e.get('acq_status', '')}".strip(),
+                lambda e: f"{e.get('valo_text', '')} {e.get('valo_status', '')}".strip(),
+                lambda e: f"{e.get('sensi_text', '')} {e.get('sensi_status', '')}".strip(),
+                lambda e: f"{e.get('cf_ra_text', '')} {e.get('cf_ra_status', '')}".strip(),
+                'quality_legacy', 'quality_target', 'root_cause_application', 'root_cause_type', 'xva_remarks', 'prb_id_number', 'hiim_id_number', 'time_loss'
+            ]
+        elif application == 'REG':
+            headers = ['Date', 'Day', 'Closing', 'Iteration', 'Issue', 'Action Taken and Update', 'Status', 'PRB', 'HIIM', 'Backlog Item']
+            field_mappings = [
+                'date', 'day', 'closing', 'iteration', 'reg_issue', 'action_taken_and_update', 'reg_status', 'reg_prb', 'reg_hiim', 'backlog_item'
+            ]
+        elif application == 'OTHERS':
+            headers = ['Date', 'Day', 'DARE', 'TIMINGS', 'PUNTUALITY ISSUE', 'QUALITY', 'QUALITY ISSUE', 'PRB', 'HIIM']
+            field_mappings = [
+                'date', 'day', 'dare', 'timings', 'puntuality_issue', 'quality', 'quality_issue', 'others_prb', 'others_hiim'
+            ]
+        else:
+            # Default for unknown applications
+            headers = ['Date', 'Day', 'PRC Mail', 'CP Alerts', 'Quality', 'Punctuality Issue Description', 'Time Loss', 'PRB ID', 'HIIM ID', 'Remarks']
+            field_mappings = [
+                'date', 'day', 
+                lambda e: f"{e.get('prc_mail_text', '')} {e.get('prc_mail_status', '')}".strip(),
+                lambda e: f"{e.get('cp_alerts_text', '')} {e.get('cp_alerts_status', '')}".strip(),
+                'quality_status', 'issue_description', 'time_loss', 'prb_id_number', 'hiim_id_number', 'remarks'
+            ]        # Write headers
+        for col, header in enumerate(headers, 1):
+            cell = ws.cell(row=1, column=col, value=header)
+            cell.font = Font(bold=True, color="FFFFFF")
+            cell.fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
+            cell.alignment = Alignment(horizontal="center")
+        
+        # Write data rows using the field mappings for this application
+        for row, entry in enumerate(entries, 2):
+            for col, field_mapping in enumerate(field_mappings, 1):
+                if callable(field_mapping):
+                    # Field mapping is a function (for combined fields)
+                    value = field_mapping(entry)
+                else:
+                    # Field mapping is a simple field name
+                    value = entry.get(field_mapping, '')
+                ws.cell(row=row, column=col, value=value)
+        
+        # Auto-adjust column widths
+        for column in ws.columns:
+            max_length = 0
+            column_letter = column[0].column_letter
+            for cell in column:
+                try:
+                    if len(str(cell.value)) > max_length:
+                        max_length = len(str(cell.value))
+                except:
+                    pass
+            adjusted_width = min(max_length + 2, 50)  # Cap at 50 characters
+            ws.column_dimensions[column_letter].width = adjusted_width
+        
+        # Save to BytesIO
+        output = io.BytesIO()
+        wb.save(output)
+        output.seek(0)
+        
+        # Generate filename with current timestamp and application name
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        safe_app_name = application.replace(' ', '_').replace('/', '_')
+        filename = f"ProdVision_{safe_app_name}_{timestamp}.xlsx"
+        
+        return send_file(
+            output,
+            as_attachment=True,
+            download_name=filename,
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+        
+    except Exception as e:
+        return jsonify({'error': f'Failed to generate Excel file: {str(e)}'}), 500
 
 @app.route('/api/stats')
 def get_stats():

@@ -50,6 +50,7 @@ const filters = {
 // Search elements
 const freeSearchInput = document.getElementById('free-search');
 const clearSearchBtn = document.getElementById('clear-search');
+const downloadExcelBtn = document.getElementById('download-excel-btn');
 
 const applyFiltersBtn = document.getElementById('apply-filters');
 const clearFiltersBtn = document.getElementById('clear-filters');
@@ -168,6 +169,11 @@ function setupEventListeners() {
     cancelXvaEntryBtn.addEventListener('click', hideEntryModal);
     cancelRegEntryBtn.addEventListener('click', hideEntryModal);
     cancelOthersEntryBtn.addEventListener('click', hideEntryModal);
+    
+    // Download button
+    if (downloadExcelBtn) {
+        downloadExcelBtn.addEventListener('click', downloadExcel);
+    }
     
     // Time formatting for PRC Mail and CP Alerts
     setupTimeFormatting();
@@ -1168,12 +1174,18 @@ function updateAuthUI() {
         if (addEntryBtn) {
             addEntryBtn.style.display = 'inline-block';
         }
+        if (downloadExcelBtn) {
+            downloadExcelBtn.style.display = 'inline-block';
+        }
         document.body.classList.add('edit-mode');
     } else {
         authBtn.textContent = 'Enable Edit';
         authStatus.textContent = '';
         if (addEntryBtn) {
             addEntryBtn.style.display = 'none';
+        }
+        if (downloadExcelBtn) {
+            downloadExcelBtn.style.display = 'none';
         }
         document.body.classList.remove('edit-mode');
     }
@@ -7243,6 +7255,71 @@ function clearSearch() {
     console.log('🔍 Clearing search');
     freeSearchInput.value = '';
     showAllRows();
+}
+
+// Excel download function
+async function downloadExcel() {
+    if (!isAuthenticated) {
+        alert('Please authenticate first to download data.');
+        return;
+    }
+    
+    try {
+        // Show loading state (using text for loading)
+        const originalHTML = downloadExcelBtn.innerHTML;
+        downloadExcelBtn.innerHTML = '<span style="font-size: 12px;">Loading...</span>';
+        downloadExcelBtn.disabled = true;
+        
+        // Build query parameters with current filters
+        const params = new URLSearchParams();
+        params.append('application', filters.application);
+        
+        if (filters.startDate && filters.startDate.value) {
+            params.append('start_date', filters.startDate.value);
+        }
+        if (filters.endDate && filters.endDate.value) {
+            params.append('end_date', filters.endDate.value);
+        }
+        
+        const response = await fetch(`/api/download/excel?${params.toString()}`, {
+            method: 'GET',
+            credentials: 'include'
+        });
+        
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Failed to download Excel file');
+        }
+        
+        // Get the blob from the response
+        const blob = await response.blob();
+        
+        // Get filename from Content-Disposition header or use default
+        const contentDisposition = response.headers.get('content-disposition');
+        let filename = 'ProdVision_Dashboard_Data.xlsx';
+        if (contentDisposition && contentDisposition.includes('filename=')) {
+            filename = contentDisposition.split('filename=')[1].replace(/['"]/g, '');
+        }
+        
+        // Create blob URL and trigger download
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.style.display = 'none';
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        
+    } catch (error) {
+        console.error('Error downloading Excel:', error);
+        alert('Failed to download Excel file: ' + error.message);
+    } finally {
+        // Restore button state
+        downloadExcelBtn.innerHTML = originalHTML;
+        downloadExcelBtn.disabled = false;
+    }
 }
 
 
