@@ -214,7 +214,6 @@ class IndependentRowSQLiteAdapter:
             }
             
             created_entries = []
-            position = 0
             
             # Create main entry (handles legacy single-value fields only if no arrays present)
             prbs_array = entry_data.get('prbs', [])
@@ -233,7 +232,7 @@ class IndependentRowSQLiteAdapter:
             main_entry = {
                 **common_data,
                 'row_type': 'main',
-                'row_position': position,
+                'row_position': 0,
                 'prb_id_number': main_prb_id,
                 'prb_id_status': main_prb_status,
                 'prb_link': main_prb_link,
@@ -246,14 +245,18 @@ class IndependentRowSQLiteAdapter:
             entry_id = self._insert_row(cursor, main_entry)
             main_entry['id'] = entry_id
             created_entries.append(main_entry)
-            position += 1
             
-            # Create independent rows for each PRB in array
-            for prb in prbs_array:
+            # Create independent rows with position representing Item Set number
+            # Create PRBs with Item Set position alignment
+            for item_set_position, prb in enumerate(prbs_array):
+                if prb is None:
+                    # Skip None placeholders during creation
+                    continue
+                    
                 prb_entry = {
                     **common_data,
                     'row_type': 'prb',
-                    'row_position': position,
+                    'row_position': item_set_position,  # This represents Item Set number (0, 1, 2, etc.)
                     'prb_id_number': str(prb.get('prb_id_number', '')) if prb.get('prb_id_number') is not None else '',
                     'prb_id_status': prb.get('prb_id_status', ''),
                     'prb_link': prb.get('prb_link', ''),
@@ -267,14 +270,17 @@ class IndependentRowSQLiteAdapter:
                 entry_id = self._insert_row(cursor, prb_entry)
                 prb_entry['id'] = entry_id
                 created_entries.append(prb_entry)
-                position += 1
             
-            # Create independent rows for each HIIM in array
-            for hiim in hiims_array:
+            # Create HIIMs with Item Set position alignment  
+            for item_set_position, hiim in enumerate(hiims_array):
+                if hiim is None:
+                    # Skip None placeholders during creation
+                    continue
+                    
                 hiim_entry = {
                     **common_data,
                     'row_type': 'hiim',
-                    'row_position': position,
+                    'row_position': item_set_position,  # This represents Item Set number (0, 1, 2, etc.)
                     'hiim_id_number': str(hiim.get('hiim_id_number', '')) if hiim.get('hiim_id_number') is not None else '',
                     'hiim_id_status': hiim.get('hiim_id_status', ''),
                     'hiim_link': hiim.get('hiim_link', ''),
@@ -288,14 +294,17 @@ class IndependentRowSQLiteAdapter:
                 entry_id = self._insert_row(cursor, hiim_entry)
                 hiim_entry['id'] = entry_id
                 created_entries.append(hiim_entry)
-                position += 1
             
-            # Create independent rows for each Issue in array
-            for issue in issues_array:
+            # Create Issues with Item Set position alignment
+            for item_set_position, issue in enumerate(issues_array):
+                if issue is None:
+                    # Skip None placeholders during creation
+                    continue
+                    
                 issue_entry = {
                     **common_data,
                     'row_type': 'issue',
-                    'row_position': position,
+                    'row_position': item_set_position,  # This represents Item Set number (0, 1, 2, etc.)
                     'issue_description': issue.get('description', ''),
                     # Clear other type-specific fields for independence
                     'prb_id_number': '',
@@ -309,7 +318,6 @@ class IndependentRowSQLiteAdapter:
                 entry_id = self._insert_row(cursor, issue_entry)
                 issue_entry['id'] = entry_id
                 created_entries.append(issue_entry)
-                position += 1
             
             conn.commit()
             
@@ -492,14 +500,27 @@ class IndependentRowSQLiteAdapter:
         # Track which IDs are being kept
         updated_ids = []
         
-        # Process new data
+        # Process new data - maintain Item Set position alignment
         for i, item_data in enumerate(new_data):
+            if item_data is None:
+                # Handle empty slots: delete any existing row at this position
+                cursor.execute(
+                    "DELETE FROM entries WHERE grouping_key = ? AND row_type = ? AND row_position = ?",
+                    (grouping_key, row_type, i)
+                )
+                continue
+                
             if 'id' in item_data and item_data['id'] in existing_ids:
-                # Update existing row
+                # Update existing row and ensure correct position
                 self._update_existing_related_row(cursor, item_data['id'], item_data, row_type)
+                # Update position to match Item Set alignment
+                cursor.execute(
+                    "UPDATE entries SET row_position = ? WHERE id = ?",
+                    (i, item_data['id'])
+                )
                 updated_ids.append(item_data['id'])
             else:
-                # Create new row
+                # Create new row at correct Item Set position
                 new_id = self._create_new_related_row(cursor, grouping_key, item_data, row_type, i)
                 updated_ids.append(new_id)
         
@@ -730,39 +751,57 @@ class IndependentRowSQLiteAdapter:
                 related_rows = cursor.fetchall()
                 related_dicts = [dict(zip(columns, row)) for row in related_rows]
                 
-                # Separate into main entry and child arrays
-                prbs = []
-                hiims = []
-                issues = []
+                # Build position-based arrays with null placeholders for Item Set alignment
+                prb_dict = {}
+                hiim_dict = {}
+                issue_dict = {}
+                max_position = 0
                 
                 for row in related_dicts:
                     if row['id'] == entry_id:
                         # This is our main entry, keep it as target_entry
                         continue
-                    elif row['row_type'] == 'prb':
-                        prbs.append({
+                    
+                    position = row.get('row_position', 0)
+                    max_position = max(max_position, position)
+                    
+                    if row['row_type'] == 'prb':
+                        prb_dict[position] = {
                             'id': row['id'],
                             'prb_id_number': row['prb_id_number'],
                             'prb_id_status': row['prb_id_status'],
                             'prb_link': row['prb_link'],
+                            'row_position': position,  # Include position for frontend
                             'created_at': row['created_at']
-                        })
+                        }
                     elif row['row_type'] == 'hiim':
-                        hiims.append({
+                        hiim_dict[position] = {
                             'id': row['id'],
                             'hiim_id_number': row['hiim_id_number'],
                             'hiim_id_status': row['hiim_id_status'],
                             'hiim_link': row['hiim_link'],
+                            'row_position': position,  # Include position for frontend
                             'created_at': row['created_at']
-                        })
+                        }
                     elif row['row_type'] == 'issue':
-                        issues.append({
+                        issue_dict[position] = {
                             'id': row['id'],
                             'description': row['issue_description'],
+                            'row_position': position,  # Include position for frontend
                             'created_at': row['created_at']
-                        })
+                        }
                 
-                # Attach child arrays to main entry
+                # Build arrays with null placeholders to maintain Item Set positions
+                prbs = []
+                hiims = []
+                issues = []
+                
+                for i in range(max_position + 1):
+                    prbs.append(prb_dict.get(i, None))
+                    hiims.append(hiim_dict.get(i, None))
+                    issues.append(issue_dict.get(i, None))
+                
+                # Attach position-aligned arrays to main entry
                 target_entry['prbs'] = prbs
                 target_entry['hiims'] = hiims
                 target_entry['issues'] = issues

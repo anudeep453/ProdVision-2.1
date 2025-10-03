@@ -240,23 +240,23 @@ def validate_entry_data(data):
         # Validate PRBs array if present
         if 'prbs' in data and isinstance(data['prbs'], list):
             for prb in data['prbs']:
-                if 'prb_id_number' in prb and prb['prb_id_number'] is not None:
+                if prb is not None and 'prb_id_number' in prb and prb['prb_id_number'] is not None:
                     try:
                         int(prb['prb_id_number'])
                     except Exception:
                         return False, 'Invalid PRB id number'
-                if prb.get('prb_id_status') and prb['prb_id_status'] not in ['active', 'closed']:
+                if prb is not None and prb.get('prb_id_status') and prb['prb_id_status'] not in ['active', 'closed']:
                     return False, 'Invalid PRB ID status in array'
 
         # Validate HIIMs array if present
         if 'hiims' in data and isinstance(data['hiims'], list):
             for hiim in data['hiims']:
-                if 'hiim_id_number' in hiim and hiim['hiim_id_number'] is not None:
+                if hiim is not None and 'hiim_id_number' in hiim and hiim['hiim_id_number'] is not None:
                     try:
                         int(hiim['hiim_id_number'])
                     except Exception:
                         return False, 'Invalid HIIM id number'
-                if hiim.get('hiim_id_status') and hiim['hiim_id_status'] not in ['active', 'closed']:
+                if hiim is not None and hiim.get('hiim_id_status') and hiim['hiim_id_status'] not in ['active', 'closed']:
                     return False, 'Invalid HIIM ID status in array'
     
     # Common validation for all applications
@@ -296,17 +296,17 @@ def validate_independent_row_constraints(data):
     # This shouldn't happen in normal operation but validates against API misuse
     if isinstance(data.get('prbs'), list):
         for prb in data['prbs']:
-            if prb.get('date') and prb['date'] != data['date']:
+            if prb is not None and prb.get('date') and prb['date'] != data['date']:
                 return False, 'All PRBs must have the same date as the main entry for independent row integrity'
     
     if isinstance(data.get('hiims'), list):
         for hiim in data['hiims']:
-            if hiim.get('date') and hiim['date'] != data['date']:
+            if hiim is not None and hiim.get('date') and hiim['date'] != data['date']:
                 return False, 'All HIIMs must have the same date as the main entry for independent row integrity'
     
     if isinstance(data.get('issues'), list):
         for issue in data['issues']:
-            if issue.get('date') and issue['date'] != data['date']:
+            if issue is not None and issue.get('date') and issue['date'] != data['date']:
                 return False, 'All Issues must have the same date as the main entry for independent row integrity'
     
     # Validate that row_type if provided is valid

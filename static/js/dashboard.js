@@ -1578,119 +1578,133 @@ function displayEntries(entries) {
 
 function createExpandedEntryRows(entry) {
     const rows = [];
-    const issues = entry.issues || [];
-    // Dedupe PRBs/HIIMs within the entry (by id number + link)
-    const prbsRaw = entry.prbs || [];
-    const hiimsRaw = entry.hiims || [];
-    const makePrbKey = (p) => `${p.prb_id_number || ''}|${p.prb_link || ''}`;
-    const makeHiimKey = (h) => `${h.hiim_id_number || ''}|${h.hiim_link || ''}`;
-    const prbSeen = new Set();
-    const hiimSeen = new Set();
-    const prbs = [];
-    const hiims = [];
-    prbsRaw.forEach(p => { const k = makePrbKey(p); if (!prbSeen.has(k)) { prbSeen.add(k); prbs.push(p); } });
-    hiimsRaw.forEach(h => { const k = makeHiimKey(h); if (!hiimSeen.has(k)) { hiimSeen.add(k); hiims.push(h); } });
-
     const entryId = `entry-${entry.id}`;
 
-    // Build arrays including legacy single values if arrays are empty
-    const issueList = issues.length > 0 ? issues : (entry.issue_description ? [{ description: entry.issue_description }] : []);
-    const prbList = prbs.length > 0 ? prbs : (entry.prb_id_number ? [{ prb_id_number: entry.prb_id_number, prb_id_status: entry.prb_id_status, prb_link: entry.prb_link }] : []);
-    const hiimList = hiims.length > 0 ? hiims : (entry.hiim_id_number ? [{ hiim_id_number: entry.hiim_id_number, hiim_id_status: entry.hiim_id_status, hiim_link: entry.hiim_link }] : []);
-
-    // Strategy:
-    // 1. Issues are the primary anchoring rows.
-    // 2. If there are fewer PRBs/HIIMs than issues we BOTTOM-ALIGN them to the last N issue rows.
-    //    (Prevents a HIIM belonging to a later issue from showing under the first issue.)
-    // 3. If there are more PRBs/HIIMs than issues, overflow items create additional trailing rows.
-    // 4. For any row without a PRB/HIIM we explicitly blank legacy single-value fields so de-dupe logic
-    //    inside createEntryRow does not resurrect unrelated items.
-    const issueCount = Math.max(1, issueList.length); // ensure at least one row
-    const prbCount = prbList.length;
-    const hiimCount = hiimList.length;
-
-    // Determine how many extra rows needed beyond issue rows for surplus PRBs/HIIMs
-    const extraPrb = Math.max(0, prbCount - issueCount);
-    const extraHiim = Math.max(0, hiimCount - issueCount);
-    const extraRows = Math.max(extraPrb, extraHiim);
-    const totalRows = issueCount + extraRows;
-    const totalChildRows = Math.max(totalRows - 1, 0);
-
-    // Compute bottom-alignment offsets
-    const prbStartIndex = prbCount <= issueCount ? (issueCount - prbCount) : 0; // rows before this have no PRB (unless overflow later)
-    const hiimStartIndex = hiimCount <= issueCount ? (issueCount - hiimCount) : 0;
-
-    for (let i = 0; i < totalRows; i++) {
-        const isFirst = i === 0;
-        const rowId = isFirst ? entryId : `${entryId}-child-${i - 1}`;
-
-        // Issue mapping (only for the first issueCount rows)
-        const issueObj = i < issueCount ? (issueList[i] || null) : null;
-
-        // PRB mapping
-        let prbObj = null;
-        if (prbCount > 0) {
-            if (prbCount <= issueCount) {
-                // bottom aligned among issue rows
-                if (i >= prbStartIndex && i < issueCount) {
-                    prbObj = prbList[i - prbStartIndex];
-                }
-            } else {
-                // more PRBs than issues: first issueCount rows get first issueCount PRBs 1:1
-                if (i < issueCount) {
-                    prbObj = prbList[i];
-                } else {
-                    // overflow
-                    const overflowIndex = i - issueCount;
-                    prbObj = prbList[issueCount + overflowIndex] || null;
-                }
+    // NEW APPROACH: Use row_position-based Item Set alignment
+    // Create Item Sets based on row_position from database independent rows
+    const itemSets = [];
+    
+    // Get all items and sort by row_position to maintain Item Set ordering
+    const allItems = [];
+    
+    // Add issues with their positions
+    const issues = entry.issues || [];
+    issues.forEach(issue => {
+        allItems.push({
+            type: 'issue',
+            position: issue.row_position || 0,
+            data: issue
+        });
+    });
+    
+    // Add PRBs with their positions
+    const prbs = entry.prbs || [];
+    prbs.forEach(prb => {
+        allItems.push({
+            type: 'prb', 
+            position: prb.row_position || 0,
+            data: prb
+        });
+    });
+    
+    // Add HIIMs with their positions
+    const hiims = entry.hiims || [];
+    hiims.forEach(hiim => {
+        allItems.push({
+            type: 'hiim',
+            position: hiim.row_position || 0,
+            data: hiim
+        });
+    });
+    
+    // Handle legacy single-value entries (for backward compatibility)
+    if (entry.issue_description && allItems.filter(i => i.type === 'issue').length === 0) {
+        allItems.push({
+            type: 'issue',
+            position: 0,
+            data: { description: entry.issue_description }
+        });
+    }
+    
+    if (entry.prb_id_number && allItems.filter(i => i.type === 'prb').length === 0) {
+        allItems.push({
+            type: 'prb',
+            position: 0,
+            data: { 
+                prb_id_number: entry.prb_id_number, 
+                prb_id_status: entry.prb_id_status, 
+                prb_link: entry.prb_link 
             }
-        }
-
-        // HIIM mapping (bottom aligned similar logic)
-        let hiimObj = null;
-        if (hiimCount > 0) {
-            if (hiimCount <= issueCount) {
-                if (i >= hiimStartIndex && i < issueCount) {
-                    hiimObj = hiimList[i - hiimStartIndex];
-                }
-            } else {
-                if (i < issueCount) {
-                    hiimObj = hiimList[i];
-                } else {
-                    const overflowIndex = i - issueCount;
-                    hiimObj = hiimList[issueCount + overflowIndex] || null;
-                }
+        });
+    }
+    
+    if (entry.hiim_id_number && allItems.filter(i => i.type === 'hiim').length === 0) {
+        allItems.push({
+            type: 'hiim',
+            position: 0,
+            data: { 
+                hiim_id_number: entry.hiim_id_number, 
+                hiim_id_status: entry.hiim_id_status, 
+                hiim_link: entry.hiim_link 
             }
+        });
+    }
+    
+    // Group items by row_position to create Item Sets
+    const positionGroups = {};
+    allItems.forEach(item => {
+        const pos = item.position;
+        if (!positionGroups[pos]) {
+            positionGroups[pos] = { issue: null, prb: null, hiim: null };
         }
-
-        // Build per-row entry, explicitly clearing legacy fields if absent
+        positionGroups[pos][item.type] = item.data;
+    });
+    
+    // Sort positions and create Item Sets
+    const positions = Object.keys(positionGroups).map(Number).sort((a, b) => a - b);
+    
+    // Ensure we have at least one row (main row)
+    if (positions.length === 0) {
+        positions.push(0);
+        positionGroups[0] = { issue: null, prb: null, hiim: null };
+    }
+    
+    const totalChildRows = Math.max(positions.length - 1, 0);
+    
+    // Create rows for each Item Set position
+    positions.forEach((position, index) => {
+        const isFirst = index === 0;
+        const rowId = isFirst ? entryId : `${entryId}-child-${index - 1}`;
+        const itemSet = positionGroups[position];
+        
+        // Build per-row entry with only the items for this position
         const itemEntry = {
             ...entry,
-            issue_description: issueObj ? issueObj.description : '',
-            issues: issueObj ? [issueObj] : [],
-            prbs: prbObj ? [prbObj] : [],
-            hiims: hiimObj ? [hiimObj] : [],
-            prb_id_number: prbObj ? (prbObj.prb_id_number || prbObj.prb_id || '') : '',
-            prb_id_status: prbObj ? (prbObj.prb_id_status || 'default') : '',
-            prb_link: prbObj ? (prbObj.prb_link || '') : '',
-            hiim_id_number: hiimObj ? (hiimObj.hiim_id_number || hiimObj.hiim_id || '') : '',
-            hiim_id_status: hiimObj ? (hiimObj.hiim_id_status || 'default') : '',
-            hiim_link: hiimObj ? (hiimObj.hiim_link || '') : ''
+            issue_description: itemSet.issue ? itemSet.issue.description : '',
+            issues: itemSet.issue ? [itemSet.issue] : [],
+            prbs: itemSet.prb ? [itemSet.prb] : [],
+            hiims: itemSet.hiim ? [itemSet.hiim] : [],
+            prb_id_number: itemSet.prb ? (itemSet.prb.prb_id_number || itemSet.prb.prb_id || '') : '',
+            prb_id_status: itemSet.prb ? (itemSet.prb.prb_id_status || 'default') : '',
+            prb_link: itemSet.prb ? (itemSet.prb.prb_link || '') : '',
+            hiim_id_number: itemSet.hiim ? (itemSet.hiim.hiim_id_number || itemSet.hiim.hiim_id || '') : '',
+            hiim_id_status: itemSet.hiim ? (itemSet.hiim.hiim_id_status || 'default') : '',
+            hiim_link: itemSet.hiim ? (itemSet.hiim.hiim_link || '') : ''
         };
-
+        
+        // Determine row type based on what's present in this Item Set
         let rowType = 'issue';
-        if (!issueObj && prbObj && !hiimObj) rowType = 'prb';
-        else if (!issueObj && hiimObj && !prbObj) rowType = 'hiim';
-        else if (!issueObj && prbObj && hiimObj) rowType = 'issue';
-
+        if (!itemSet.issue && itemSet.prb && !itemSet.hiim) rowType = 'prb';
+        else if (!itemSet.issue && itemSet.hiim && !itemSet.prb) rowType = 'hiim';
+        else if (!itemSet.issue && itemSet.prb && itemSet.hiim) rowType = 'issue'; // mixed row
+        
         const row = createEntryRow(itemEntry, isFirst, rowType, rowId, isFirst ? totalChildRows : 0);
         if (!isFirst) {
             row.classList.add('child-row', 'hidden');
             row.setAttribute('data-parent-id', entryId);
         }
         rows.push(row);
-    }
+    });
 
     return rows;
 }
@@ -2014,13 +2028,13 @@ function createEntryRow(entry, isFirstRow, itemType, entryId, childCount) {
     
     if (isFirstRow) {
         // First row shows items normally
-        issuesDisplay = issues.length ? issues.map(i => `<div class="issue-list-item">${escapeHtml(i.description)}</div>`).join('') : (entry.issue_description ? escapeHtml(entry.issue_description) : 'N/A');
+        issuesDisplay = issues.length ? issues.filter(i => i !== null).map(i => `<div class="issue-list-item">${escapeHtml(i.description)}</div>`).join('') : (entry.issue_description ? escapeHtml(entry.issue_description) : 'N/A');
         prbDisplay = prbIdBadge;
         hiimDisplay = hiimIdBadge;
     } else {
         // For issue sub-rows, also show its related PRBs/HIIMs in the same row
         if (itemType === 'issue') {
-            issuesDisplay = issues.length ? issues.map(i => `<div class="issue-list-item">${escapeHtml(i.description)}</div>`).join('') : (entry.issue_description ? escapeHtml(entry.issue_description) : '');
+            issuesDisplay = issues.length ? issues.filter(i => i !== null).map(i => `<div class="issue-list-item">${escapeHtml(i.description)}</div>`).join('') : (entry.issue_description ? escapeHtml(entry.issue_description) : '');
             prbDisplay = prbIdBadge;
             hiimDisplay = hiimIdBadge;
         } else if (itemType === 'prb') {
@@ -3317,37 +3331,94 @@ function populateCombinedFromEntry(entry, isXva) {
     // Clear any existing cards
     container.innerHTML = '';
 
-    const issues = Array.isArray(entry.issues) && entry.issues.length ? entry.issues.map(i => i.description).filter(Boolean) : [];
-    const prbs = Array.isArray(entry.prbs) ? entry.prbs : [];
-    const hiims = Array.isArray(entry.hiims) ? entry.hiims : [];
+    const issues = Array.isArray(entry.issues) && entry.issues.length ? entry.issues : [];
+    const prbs = Array.isArray(entry.prbs) && entry.prbs.length ? entry.prbs : [];
+    const hiims = Array.isArray(entry.hiims) && entry.hiims.length ? entry.hiims : [];
 
-    // Get all available issues, PRBs, and HIIMs (including legacy data)
-    const allIssues = issues.length > 0 ? issues : (entry.issue_description ? [entry.issue_description] : []);
-    const allPrbs = prbs.length > 0 ? prbs : (entry.prb_id_number ? [{ prb_id_number: entry.prb_id_number, prb_id_status: entry.prb_id_status, prb_link: entry.prb_link }] : []);
-    const allHiims = hiims.length > 0 ? hiims : (entry.hiim_id_number ? [{ hiim_id_number: entry.hiim_id_number, hiim_id_status: entry.hiim_id_status, hiim_link: entry.hiim_link }] : []);
+    // Get legacy single fields if arrays are empty
+    const legacyIssue = entry.issue_description || '';
+    const legacyPrb = entry.prb_id_number ? {
+        prb_id_number: entry.prb_id_number,
+        prb_id_status: entry.prb_id_status || '',
+        prb_link: entry.prb_link || ''
+    } : null;
+    const legacyHiim = entry.hiim_id_number ? {
+        hiim_id_number: entry.hiim_id_number,
+        hiim_id_status: entry.hiim_id_status || '',
+        hiim_link: entry.hiim_link || ''
+    } : null;
+
     const timeLoss = entry.time_loss || '';
+    let cardCreated = false;
 
-    // Create a map to group related items together intelligently
-    const maxLength = Math.max(allIssues.length, allPrbs.length, allHiims.length);
-    
-    // Only create cards when there's actual content to show
-    if (maxLength === 0) {
-        // If no data at all, create one empty card
-        addCombinedItemCard(isXva, { issue: '', prb: null, hiim: null, time_loss: timeLoss });
-    } else {
-        // Create cards only for items that have actual content
-        for (let i = 0; i < maxLength; i++) {
-            const issue = i < allIssues.length ? allIssues[i] : '';
-            const prb = i < allPrbs.length ? allPrbs[i] : null;
-            const hiim = i < allHiims.length ? allHiims[i] : null;
+    // Create one card per issue with completely independent PRB/HIIM slots
+    // This ensures each issue has its own PRB/HIIM without cross-contamination
+    if (issues.length > 0) {
+        issues.forEach((issue, index) => {
+            // Handle null placeholders in issues array
+            if (issue === null) {
+                return; // Skip null placeholders
+            }
+            const issueDescription = issue.description || issue;
+            const relatedPrb = index < prbs.length ? prbs[index] : null;
+            const relatedHiim = index < hiims.length ? hiims[index] : null;
+            const cardTimeLoss = index === 0 ? timeLoss : '';
             
-            // Only create a card if there's at least one piece of meaningful content
-            if (issue || prb || hiim) {
-                // Only add time_loss to the first card
-                const cardTimeLoss = i === 0 ? timeLoss : '';
-                addCombinedItemCard(isXva, { issue, prb, hiim, time_loss: cardTimeLoss });
+            addCombinedItemCard(isXva, { 
+                issue: issueDescription, 
+                prb: relatedPrb, 
+                hiim: relatedHiim, 
+                time_loss: cardTimeLoss 
+            });
+            cardCreated = true;
+        });
+        
+        // If there are more PRBs or HIIMs than issues, create additional cards for them
+        const maxExtraItems = Math.max(prbs.length, hiims.length) - issues.length;
+        for (let i = issues.length; i < issues.length + maxExtraItems; i++) {
+            const extraPrb = i < prbs.length ? prbs[i] : null;
+            const extraHiim = i < hiims.length ? hiims[i] : null;
+            
+            if (extraPrb || extraHiim) {
+                addCombinedItemCard(isXva, { 
+                    issue: '', 
+                    prb: extraPrb, 
+                    hiim: extraHiim, 
+                    time_loss: '' 
+                });
+                cardCreated = true;
             }
         }
+    } else if (prbs.length > 0 || hiims.length > 0) {
+        // No issues, but have PRBs/HIIMs
+        const maxItems = Math.max(prbs.length, hiims.length);
+        for (let i = 0; i < maxItems; i++) {
+            const prb = i < prbs.length ? prbs[i] : null;
+            const hiim = i < hiims.length ? hiims[i] : null;
+            const cardTimeLoss = i === 0 ? timeLoss : '';
+            
+            addCombinedItemCard(isXva, { 
+                issue: '', 
+                prb: prb, 
+                hiim: hiim, 
+                time_loss: cardTimeLoss 
+            });
+            cardCreated = true;
+        }
+    } else if (legacyIssue || legacyPrb || legacyHiim) {
+        // Use legacy data
+        addCombinedItemCard(isXva, { 
+            issue: legacyIssue, 
+            prb: legacyPrb, 
+            hiim: legacyHiim, 
+            time_loss: timeLoss 
+        });
+        cardCreated = true;
+    }
+
+    // If no data at all, create one empty card
+    if (!cardCreated) {
+        addCombinedItemCard(isXva, { issue: '', prb: null, hiim: null, time_loss: timeLoss });
     }
 }
 
@@ -3789,10 +3860,14 @@ function serializeIssuesFor(isXva = false) {
     
     if (combinedContainer) {
         const cards = combinedContainer.querySelectorAll('.combined-item-card');
-        cards.forEach(card => {
+        cards.forEach((card, index) => {
             const textarea = card.querySelector('.issue-description');
             if (textarea && textarea.value.trim()) {
+                // Item Set has issue data
                 issues.push({ description: textarea.value.trim() });
+            } else {
+                // Item Set has no issue - add null placeholder to maintain position alignment
+                issues.push(null);
             }
         });
     }
@@ -3841,19 +3916,23 @@ function serializePrbs(isXva = false) {
     
     if (combinedContainer) {
         const cards = combinedContainer.querySelectorAll('.combined-item-card');
-        cards.forEach(card => {
+        cards.forEach((card, index) => {
             const idInput = card.querySelector('.prb-id-number');
             const statusSelect = card.querySelector('.prb-id-status');
             const linkInput = card.querySelector('.prb-link');
             const issueTextarea = card.querySelector('.issue-description');
             
             if (idInput && idInput.value) {
+                // Item Set has PRB data
                 prbs.push({
                     prb_id_number: parseInt(idInput.value),
                     prb_id_status: statusSelect ? statusSelect.value : '',
                     prb_link: linkInput ? linkInput.value : '',
                     related_issue: issueTextarea && issueTextarea.value ? issueTextarea.value.trim() : ''
                 });
+            } else {
+                // Item Set has no PRB - add null placeholder to maintain position alignment
+                prbs.push(null);
             }
         });
     }
@@ -3889,19 +3968,23 @@ function serializeHiims(isXva = false) {
     
     if (combinedContainer) {
         const cards = combinedContainer.querySelectorAll('.combined-item-card');
-        cards.forEach(card => {
+        cards.forEach((card, index) => {
             const idInput = card.querySelector('.hiim-id-number');
             const statusSelect = card.querySelector('.hiim-id-status');
             const linkInput = card.querySelector('.hiim-link');
             const issueTextarea = card.querySelector('.issue-description');
             
             if (idInput && idInput.value) {
+                // Item Set has HIIM data
                 hiims.push({
                     hiim_id_number: parseInt(idInput.value),
                     hiim_id_status: statusSelect ? statusSelect.value : '',
                     hiim_link: linkInput ? linkInput.value : '',
                     related_issue: issueTextarea && issueTextarea.value ? issueTextarea.value.trim() : ''
                 });
+            } else {
+                // Item Set has no HIIM - add null placeholder to maintain position alignment
+                hiims.push(null);
             }
         });
     }
