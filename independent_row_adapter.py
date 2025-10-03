@@ -1,0 +1,915 @@
+"""
+Updated SharePoint SQLite Adapter for Independent Rows
+This version eliminates parent-child dependencies and treats each row independently
+"""
+
+import os
+import sqlite3
+from datetime import datetime
+from typing import Dict, List, Optional, Any
+
+class IndependentRowSQLiteAdapter:
+    """SQLite adapter with independent row structure - no parent-child dependencies"""
+    
+    def __init__(self, sharepoint_url: str, db_name: str = "prodvision.db"):
+        self.sharepoint_url = sharepoint_url.rstrip('/')
+        self.db_name = db_name
+        self.local_db_path = f"./data/{db_name}"
+        self.ensure_data_directory()
+        
+        # Initialize local database
+        self.init_database()
+    
+    def ensure_data_directory(self):
+        """Ensure data directory exists"""
+        data_dir = os.path.dirname(self.local_db_path)
+        if not os.path.exists(data_dir):
+            os.makedirs(data_dir)
+    
+    def init_database(self):
+        """Initialize SQLite database with independent row structure"""
+        conn = sqlite3.connect(self.local_db_path)
+        cursor = conn.cursor()
+        
+        # Create entries table - each row is completely independent
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS entries (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                
+                -- Basic entry information
+                date TEXT NOT NULL,
+                day TEXT,
+                application_name TEXT NOT NULL,
+                
+                -- Row type and grouping (for UI display only)
+                row_type TEXT DEFAULT 'main' CHECK(row_type IN ('main', 'prb', 'hiim', 'issue')),
+                grouping_key TEXT,  -- Computed field for UI grouping (date + application)
+                row_position INTEGER DEFAULT 0,  -- Position within group for ordering
+                
+                -- Common fields (duplicated across all rows for same date)
+                prc_mail_text TEXT,
+                prc_mail_status TEXT,
+                cp_alerts_text TEXT,
+                cp_alerts_status TEXT,
+                quality_status TEXT,
+                quality_legacy TEXT,
+                quality_target TEXT,
+                remarks TEXT,
+                
+                -- XVA-specific common fields
+                valo_text TEXT,
+                valo_status TEXT,
+                sensi_text TEXT,
+                sensi_status TEXT,
+                cf_ra_text TEXT,
+                cf_ra_status TEXT,
+                acq_text TEXT,
+                root_cause_application TEXT,
+                root_cause_type TEXT,
+                xva_remarks TEXT,
+                
+                -- REG-specific common fields
+                closing TEXT,
+                iteration TEXT,
+                reg_issue TEXT,
+                action_taken_and_update TEXT,
+                reg_status TEXT,
+                reg_prb TEXT,
+                reg_hiim TEXT,
+                backlog_item TEXT,
+                
+                -- OTHERS-specific common fields
+                dare TEXT,
+                timings TEXT,
+                puntuality_issue TEXT,
+                quality TEXT,
+                quality_issue TEXT,
+                others_prb TEXT,
+                others_hiim TEXT,
+                
+                -- Row-specific fields (only one type populated per row)
+                -- PRB fields (populated when row_type='prb' or row_type='main' with PRB)
+                prb_id_number TEXT,
+                prb_id_status TEXT,
+                prb_link TEXT,
+                
+                -- HIIM fields (populated when row_type='hiim' or row_type='main' with HIIM)
+                hiim_id_number TEXT,
+                hiim_id_status TEXT,
+                hiim_link TEXT,
+                
+                -- Issue fields (populated when row_type='issue' or row_type='main' with issue)
+                issue_description TEXT,
+                
+                -- Time Loss fields (applicable to CVAR applications)
+                time_loss TEXT,
+                
+                -- Timestamps
+                created_at TEXT,
+                updated_at TEXT
+            )
+        ''')
+        
+        # Create settings table
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS settings (
+                key TEXT PRIMARY KEY,
+                value TEXT
+            )
+        ''')
+        
+        # Create indexes for performance
+        # First check if required columns exist and add them for backward compatibility
+        cursor.execute("PRAGMA table_info(entries)")
+        columns = [column[1] for column in cursor.fetchall()]
+        
+        # Add missing columns for backward compatibility
+        missing_columns = [
+            ('grouping_key', 'TEXT'),
+            ('row_type', "TEXT DEFAULT 'main' CHECK(row_type IN ('main', 'prb', 'hiim', 'issue'))"),
+            ('row_position', 'INTEGER DEFAULT 0'),
+            ('time_loss', 'TEXT')
+        ]
+        
+        for column_name, column_def in missing_columns:
+            if column_name not in columns:
+                cursor.execute(f"ALTER TABLE entries ADD COLUMN {column_name} {column_def}")
+        
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_entries_grouping_key ON entries(grouping_key)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_entries_date_app ON entries(date, application_name)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_entries_row_type ON entries(row_type)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_entries_date ON entries(date)")
+        
+        conn.commit()
+        conn.close()
+    
+    def get_connection(self):
+        """Get database connection"""
+        return sqlite3.connect(self.local_db_path)
+    
+    def generate_grouping_key(self, date: str, application_name: str) -> str:
+        """Generate grouping key for UI display grouping"""
+        return f"{date}_{application_name}"
+    
+    def create_entry(self, entry_data: Dict) -> Optional[Dict]:
+        """
+        Create new independent entries
+        Input can be:
+        1. Single entry with single PRB/HIIM/Issue
+        2. Single entry with arrays of PRBs/HIIMs/Issues
+        
+        Each will be stored as independent rows
+        """
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            
+            now = datetime.utcnow().isoformat()
+            date = entry_data.get('date', '')
+            application_name = entry_data.get('application_name', '')
+            grouping_key = self.generate_grouping_key(date, application_name)
+            
+            # Common data to be duplicated across all rows
+            common_data = {
+                'date': date,
+                'day': entry_data.get('day', ''),
+                'application_name': application_name,
+                'grouping_key': grouping_key,
+                'prc_mail_text': entry_data.get('prc_mail_text', ''),
+                'prc_mail_status': entry_data.get('prc_mail_status', ''),
+                'cp_alerts_text': entry_data.get('cp_alerts_text', ''),
+                'cp_alerts_status': entry_data.get('cp_alerts_status', ''),
+                'quality_status': entry_data.get('quality_status', ''),
+                'quality_legacy': entry_data.get('quality_legacy', ''),
+                'quality_target': entry_data.get('quality_target', ''),
+                'remarks': entry_data.get('remarks', ''),
+                'valo_text': entry_data.get('valo_text', ''),
+                'valo_status': entry_data.get('valo_status', ''),
+                'sensi_text': entry_data.get('sensi_text', ''),
+                'sensi_status': entry_data.get('sensi_status', ''),
+                'cf_ra_text': entry_data.get('cf_ra_text', ''),
+                'cf_ra_status': entry_data.get('cf_ra_status', ''),
+                'acq_text': entry_data.get('acq_text', ''),
+                'root_cause_application': entry_data.get('root_cause_application', ''),
+                'root_cause_type': entry_data.get('root_cause_type', ''),
+                'xva_remarks': entry_data.get('xva_remarks', ''),
+                'closing': entry_data.get('closing', ''),
+                'iteration': entry_data.get('iteration', ''),
+                'reg_issue': entry_data.get('reg_issue', ''),
+                'action_taken_and_update': entry_data.get('action_taken_and_update', ''),
+                'reg_status': entry_data.get('reg_status', ''),
+                'reg_prb': entry_data.get('reg_prb', ''),
+                'reg_hiim': entry_data.get('reg_hiim', ''),
+                'backlog_item': entry_data.get('backlog_item', ''),
+                'dare': entry_data.get('dare', ''),
+                'timings': entry_data.get('timings', ''),
+                'puntuality_issue': entry_data.get('puntuality_issue', ''),
+                'quality': entry_data.get('quality', ''),
+                'quality_issue': entry_data.get('quality_issue', ''),
+                'others_prb': entry_data.get('others_prb', ''),
+                'others_hiim': entry_data.get('others_hiim', ''),
+                'time_loss': entry_data.get('time_loss', ''),
+                'created_at': now,
+                'updated_at': now
+            }
+            
+            created_entries = []
+            position = 0
+            
+            # Create main entry (handles legacy single-value fields only if no arrays present)
+            prbs_array = entry_data.get('prbs', [])
+            hiims_array = entry_data.get('hiims', [])
+            issues_array = entry_data.get('issues', [])
+            
+            # Only include legacy PRB/HIIM data in main entry if no arrays are provided
+            main_prb_id = entry_data.get('prb_id_number', '') if not prbs_array else ''
+            main_prb_status = entry_data.get('prb_id_status', '') if not prbs_array else ''
+            main_prb_link = entry_data.get('prb_link', '') if not prbs_array else ''
+            main_hiim_id = entry_data.get('hiim_id_number', '') if not hiims_array else ''
+            main_hiim_status = entry_data.get('hiim_id_status', '') if not hiims_array else ''
+            main_hiim_link = entry_data.get('hiim_link', '') if not hiims_array else ''
+            main_issue_desc = entry_data.get('issue_description', '') if not issues_array else ''
+            
+            main_entry = {
+                **common_data,
+                'row_type': 'main',
+                'row_position': position,
+                'prb_id_number': main_prb_id,
+                'prb_id_status': main_prb_status,
+                'prb_link': main_prb_link,
+                'hiim_id_number': main_hiim_id,
+                'hiim_id_status': main_hiim_status,
+                'hiim_link': main_hiim_link,
+                'issue_description': main_issue_desc,
+            }
+            
+            entry_id = self._insert_row(cursor, main_entry)
+            main_entry['id'] = entry_id
+            created_entries.append(main_entry)
+            position += 1
+            
+            # Create independent rows for each PRB in array
+            for prb in prbs_array:
+                prb_entry = {
+                    **common_data,
+                    'row_type': 'prb',
+                    'row_position': position,
+                    'prb_id_number': str(prb.get('prb_id_number', '')) if prb.get('prb_id_number') is not None else '',
+                    'prb_id_status': prb.get('prb_id_status', ''),
+                    'prb_link': prb.get('prb_link', ''),
+                    # Clear other type-specific fields for independence
+                    'hiim_id_number': '',
+                    'hiim_id_status': '',
+                    'hiim_link': '',
+                    'issue_description': '',
+                }
+                
+                entry_id = self._insert_row(cursor, prb_entry)
+                prb_entry['id'] = entry_id
+                created_entries.append(prb_entry)
+                position += 1
+            
+            # Create independent rows for each HIIM in array
+            for hiim in hiims_array:
+                hiim_entry = {
+                    **common_data,
+                    'row_type': 'hiim',
+                    'row_position': position,
+                    'hiim_id_number': str(hiim.get('hiim_id_number', '')) if hiim.get('hiim_id_number') is not None else '',
+                    'hiim_id_status': hiim.get('hiim_id_status', ''),
+                    'hiim_link': hiim.get('hiim_link', ''),
+                    # Clear other type-specific fields for independence
+                    'prb_id_number': '',
+                    'prb_id_status': '',
+                    'prb_link': '',
+                    'issue_description': '',
+                }
+                
+                entry_id = self._insert_row(cursor, hiim_entry)
+                hiim_entry['id'] = entry_id
+                created_entries.append(hiim_entry)
+                position += 1
+            
+            # Create independent rows for each Issue in array
+            for issue in issues_array:
+                issue_entry = {
+                    **common_data,
+                    'row_type': 'issue',
+                    'row_position': position,
+                    'issue_description': issue.get('description', ''),
+                    # Clear other type-specific fields for independence
+                    'prb_id_number': '',
+                    'prb_id_status': '',
+                    'prb_link': '',
+                    'hiim_id_number': '',
+                    'hiim_id_status': '',
+                    'hiim_link': '',
+                }
+                
+                entry_id = self._insert_row(cursor, issue_entry)
+                issue_entry['id'] = entry_id
+                created_entries.append(issue_entry)
+                position += 1
+            
+            conn.commit()
+            
+            # Return the main entry with attached arrays for API compatibility
+            result = created_entries[0].copy()  # Main entry
+            result['prbs'] = [e for e in created_entries if e['row_type'] == 'prb']
+            result['hiims'] = [e for e in created_entries if e['row_type'] == 'hiim']
+            result['issues'] = [{'description': e['issue_description']} for e in created_entries if e['row_type'] == 'issue']
+            
+            return result
+            
+        except Exception as e:
+            conn.rollback()
+            raise e
+        finally:
+            conn.close()
+    
+    def _insert_row(self, cursor, row_data):
+        """Helper to insert a single row and return its ID"""
+        columns = list(row_data.keys())
+        placeholders = ', '.join(['?' for _ in columns])
+        column_names = ', '.join(columns)
+        values = [row_data[col] for col in columns]
+        
+        query = f"INSERT INTO entries ({column_names}) VALUES ({placeholders})"
+        cursor.execute(query, values)
+        return cursor.lastrowid
+    
+    def get_entries_by_application(self, application_name: str, start_date: str = None, end_date: str = None) -> List[Dict]:
+        """
+        Get independent entries and group them for UI display compatibility
+        Returns entries grouped by date with arrays for multiple PRBs/HIIMs/Issues
+        """
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        # Build query
+        query = "SELECT * FROM entries WHERE application_name = ?"
+        params = [application_name]
+        
+        if start_date:
+            query += " AND date >= ?"
+            params.append(start_date)
+        
+        if end_date:
+            query += " AND date <= ?"
+            params.append(end_date)
+        
+        query += " ORDER BY date DESC, grouping_key, row_position"
+        
+        cursor.execute(query, params)
+        columns = [description[0] for description in cursor.description]
+        all_rows = [dict(zip(columns, row)) for row in cursor.fetchall()]
+        
+        # Group independent rows by grouping_key for UI display
+        grouped_entries = {}
+        for row in all_rows:
+            grouping_key = row['grouping_key']
+            if grouping_key not in grouped_entries:
+                grouped_entries[grouping_key] = {
+                    'main': None,
+                    'prbs': [],
+                    'hiims': [],
+                    'issues': []
+                }
+            
+            if row['row_type'] == 'main':
+                grouped_entries[grouping_key]['main'] = row
+            elif row['row_type'] == 'prb':
+                grouped_entries[grouping_key]['prbs'].append(row)
+            elif row['row_type'] == 'hiim':
+                grouped_entries[grouping_key]['hiims'].append(row)
+            elif row['row_type'] == 'issue':
+                grouped_entries[grouping_key]['issues'].append({'description': row['issue_description']})
+        
+        # Convert back to API-compatible format
+        result_entries = []
+        for grouping_key, group in grouped_entries.items():
+            if group['main']:
+                main_entry = group['main'].copy()
+                main_entry['prbs'] = group['prbs']
+                main_entry['hiims'] = group['hiims']
+                main_entry['issues'] = group['issues']
+                result_entries.append(main_entry)
+        
+        conn.close()
+        return result_entries
+    
+    def update_entry(self, entry_id: int, entry_data: Dict, application_name: str = None) -> Optional[Dict]:
+        """
+        Comprehensive update for independent entries
+        Handles updating main entry and managing related PRBs/HIIMs/issues
+        """
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        try:
+            # Get current entry to understand its structure
+            cursor.execute("SELECT * FROM entries WHERE id = ?", (entry_id,))
+            row = cursor.fetchone()
+            if not row:
+                conn.close()
+                return None
+            
+            columns = [description[0] for description in cursor.description]
+            current_entry = dict(zip(columns, row))
+            
+            # If this is a main entry, we need to handle comprehensive updates
+            if current_entry['row_type'] == 'main':
+                return self._update_main_entry_comprehensive(cursor, entry_id, entry_data, current_entry)
+            else:
+                # For non-main entries, just update the single row
+                return self._update_single_row(cursor, entry_id, entry_data)
+                
+        except Exception as e:
+            conn.rollback()
+            print(f"❌ Error updating entry {entry_id}: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return None
+        finally:
+            conn.close()
+    
+    def _update_main_entry_comprehensive(self, cursor, entry_id: int, entry_data: Dict, current_entry: Dict) -> Optional[Dict]:
+        """Handle comprehensive update of main entry and all related data"""
+        try:
+            # Get the grouping key for this entry
+            grouping_key = current_entry['grouping_key']
+            if not grouping_key:
+                grouping_key = f"{current_entry['date']}_{current_entry['application_name']}"
+            
+            # 1. Update the main entry fields
+            main_fields = {}
+            for field, value in entry_data.items():
+                if field not in ['id', 'prbs', 'hiims', 'issues']:
+                    main_fields[field] = value
+            
+            # Update main entry
+            if main_fields:
+                update_fields = []
+                update_values = []
+                for field, value in main_fields.items():
+                    update_fields.append(f"{field} = ?")
+                    update_values.append(value)
+                
+                update_fields.append("updated_at = ?")
+                update_values.append(datetime.utcnow().isoformat())
+                update_values.append(entry_id)
+                
+                query = f"UPDATE entries SET {', '.join(update_fields)} WHERE id = ?"
+                cursor.execute(query, update_values)
+            
+            # 2. Handle PRBs
+            self._update_related_rows(cursor, grouping_key, 'prb', entry_data.get('prbs', []))
+            
+            # 3. Handle HIIMs  
+            self._update_related_rows(cursor, grouping_key, 'hiim', entry_data.get('hiims', []))
+            
+            # 4. Handle Issues
+            self._update_related_rows(cursor, grouping_key, 'issue', entry_data.get('issues', []))
+            
+            cursor.connection.commit()
+            
+            # Return the updated entry with all related data
+            return self.get_entry_by_id(entry_id)
+            
+        except Exception as e:
+            cursor.connection.rollback()
+            raise e
+    
+    def _update_related_rows(self, cursor, grouping_key: str, row_type: str, new_data: List[Dict]):
+        """Update related rows (PRBs, HIIMs, issues) for a grouping key"""
+        # Get existing rows of this type
+        cursor.execute(
+            "SELECT id FROM entries WHERE grouping_key = ? AND row_type = ?",
+            (grouping_key, row_type)
+        )
+        existing_ids = [row[0] for row in cursor.fetchall()]
+        
+        # Track which IDs are being kept
+        updated_ids = []
+        
+        # Process new data
+        for i, item_data in enumerate(new_data):
+            if 'id' in item_data and item_data['id'] in existing_ids:
+                # Update existing row
+                self._update_existing_related_row(cursor, item_data['id'], item_data, row_type)
+                updated_ids.append(item_data['id'])
+            else:
+                # Create new row
+                new_id = self._create_new_related_row(cursor, grouping_key, item_data, row_type, i)
+                updated_ids.append(new_id)
+        
+        # Delete rows that are no longer needed
+        for existing_id in existing_ids:
+            if existing_id not in updated_ids:
+                cursor.execute("DELETE FROM entries WHERE id = ?", (existing_id,))
+    
+    def _update_existing_related_row(self, cursor, row_id: int, item_data: Dict, row_type: str):
+        """Update an existing related row"""
+        update_fields = []
+        update_values = []
+        
+        if row_type == 'prb':
+            fields_map = {
+                'prb_id_number': item_data.get('prb_id_number'),
+                'prb_id_status': item_data.get('prb_id_status'), 
+                'prb_link': item_data.get('prb_link')
+            }
+        elif row_type == 'hiim':
+            fields_map = {
+                'hiim_id_number': item_data.get('hiim_id_number'),
+                'hiim_id_status': item_data.get('hiim_id_status'),
+                'hiim_link': item_data.get('hiim_link')
+            }
+        elif row_type == 'issue':
+            fields_map = {
+                'issue_description': item_data.get('description', item_data.get('issue_description'))
+            }
+        
+        for field, value in fields_map.items():
+            if value is not None:
+                update_fields.append(f"{field} = ?")
+                update_values.append(value)
+        
+        if update_fields:
+            update_fields.append("updated_at = ?")
+            update_values.append(datetime.utcnow().isoformat())
+            update_values.append(row_id)
+            
+            query = f"UPDATE entries SET {', '.join(update_fields)} WHERE id = ?"
+            cursor.execute(query, update_values)
+    
+    def _create_new_related_row(self, cursor, grouping_key: str, item_data: Dict, row_type: str, position: int) -> int:
+        """Create a new related row"""
+        # Get the main entry data for copying common fields
+        cursor.execute(
+            "SELECT * FROM entries WHERE grouping_key = ? AND row_type = 'main' LIMIT 1", 
+            (grouping_key,)
+        )
+        main_row = cursor.fetchone()
+        
+        if not main_row:
+            raise Exception(f"No main entry found for grouping_key: {grouping_key}")
+        
+        columns = [description[0] for description in cursor.description]
+        main_data = dict(zip(columns, main_row))
+        
+        # Create new row data
+        new_row_data = {
+            'date': main_data['date'],
+            'day': main_data['day'],
+            'application_name': main_data['application_name'],
+            'row_type': row_type,
+            'grouping_key': grouping_key,
+            'row_position': position,
+            'created_at': datetime.utcnow().isoformat(),
+            'updated_at': datetime.utcnow().isoformat()
+        }
+        
+        # Copy common fields from main entry
+        common_fields = [
+            'prc_mail_text', 'prc_mail_status', 'cp_alerts_text', 'cp_alerts_status',
+            'quality_status', 'quality_legacy', 'quality_target', 'remarks',
+            'valo_text', 'valo_status', 'sensi_text', 'sensi_status',
+            'cf_ra_text', 'cf_ra_status', 'acq_text', 'root_cause_application',
+            'root_cause_type', 'xva_remarks', 'closing', 'iteration', 'reg_issue',
+            'action_taken_and_update', 'reg_status', 'reg_prb', 'reg_hiim',
+            'backlog_item', 'dare', 'timings', 'puntuality_issue', 'quality',
+            'quality_issue', 'others_prb', 'others_hiim'
+        ]
+        
+        for field in common_fields:
+            if field in main_data:
+                new_row_data[field] = main_data[field]
+        
+        # Set type-specific fields
+        if row_type == 'prb':
+            new_row_data.update({
+                'prb_id_number': item_data.get('prb_id_number'),
+                'prb_id_status': item_data.get('prb_id_status'),
+                'prb_link': item_data.get('prb_link')
+            })
+        elif row_type == 'hiim':
+            new_row_data.update({
+                'hiim_id_number': item_data.get('hiim_id_number'),
+                'hiim_id_status': item_data.get('hiim_id_status'),
+                'hiim_link': item_data.get('hiim_link')
+            })
+        elif row_type == 'issue':
+            new_row_data.update({
+                'issue_description': item_data.get('description', item_data.get('issue_description'))
+            })
+        
+        # Insert the new row
+        return self._insert_row(cursor, new_row_data)
+    
+    def _update_single_row(self, cursor, entry_id: int, entry_data: Dict) -> Optional[Dict]:
+        """Update a single row (non-main entry)"""
+        update_fields = []
+        update_values = []
+        
+        for field, value in entry_data.items():
+            if field != 'id':
+                update_fields.append(f"{field} = ?")
+                update_values.append(value)
+        
+        update_values.append(datetime.utcnow().isoformat())
+        update_fields.append("updated_at = ?")
+        update_values.append(entry_id)
+        
+        query = f"UPDATE entries SET {', '.join(update_fields)} WHERE id = ?"
+        cursor.execute(query, update_values)
+        
+        # Return updated entry
+        cursor.execute("SELECT * FROM entries WHERE id = ?", (entry_id,))
+        columns = [description[0] for description in cursor.description]
+        updated_row = dict(zip(columns, cursor.fetchone()))
+        
+        cursor.connection.commit()
+        return updated_row
+    
+    def delete_entry(self, entry_id: int) -> bool:
+        """
+        Delete a specific independent entry
+        WARNING: This deletes only the specific row, not related rows
+        """
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        try:
+            cursor.execute("DELETE FROM entries WHERE id = ?", (entry_id,))
+            deleted = cursor.rowcount > 0
+            conn.commit()
+            return deleted
+        except Exception as e:
+            conn.rollback()
+            raise e
+        finally:
+            conn.close()
+    
+    def get_all_entries(self) -> List[Dict]:
+        """Get all independent entries grouped for UI display"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT * FROM entries ORDER BY date DESC, grouping_key, row_position")
+        columns = [description[0] for description in cursor.description]
+        all_rows = [dict(zip(columns, row)) for row in cursor.fetchall()]
+        
+        # Group by grouping_key
+        grouped_entries = {}
+        for row in all_rows:
+            grouping_key = row['grouping_key']
+            if grouping_key not in grouped_entries:
+                grouped_entries[grouping_key] = {
+                    'main': None,
+                    'prbs': [],
+                    'hiims': [],
+                    'issues': []
+                }
+            
+            if row['row_type'] == 'main':
+                grouped_entries[grouping_key]['main'] = row
+            elif row['row_type'] == 'prb':
+                grouped_entries[grouping_key]['prbs'].append(row)
+            elif row['row_type'] == 'hiim':
+                grouped_entries[grouping_key]['hiims'].append(row)
+            elif row['row_type'] == 'issue':
+                grouped_entries[grouping_key]['issues'].append({'description': row['issue_description']})
+        
+        # Convert to API format
+        result_entries = []
+        for grouping_key, group in grouped_entries.items():
+            if group['main']:
+                main_entry = group['main'].copy()
+                main_entry['prbs'] = group['prbs']
+                main_entry['hiims'] = group['hiims']
+                main_entry['issues'] = group['issues']
+                result_entries.append(main_entry)
+        
+        conn.close()
+        return result_entries
+    
+    def get_entry_by_id(self, entry_id: int, application_name: str = None) -> Optional[Dict]:
+        """Get a specific entry by ID from the independent row structure"""
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            
+            # First, get the specific entry with the requested ID
+            cursor.execute('SELECT * FROM entries WHERE id = ?', (entry_id,))
+            target_row = cursor.fetchone()
+            
+            if not target_row:
+                conn.close()
+                return None
+            
+            # Get column names
+            columns = [description[0] for description in cursor.description]
+            target_entry = dict(zip(columns, target_row))
+            
+            # If this is a main entry, we need to find related PRBs, HIIMs, and issues
+            # that share the same grouping_key
+            if target_entry['row_type'] == 'main':
+                grouping_key = target_entry['grouping_key']
+                if not grouping_key:
+                    # Generate grouping key if missing
+                    grouping_key = f"{target_entry['date']}_{target_entry['application_name']}"
+                
+                # Get all related rows with the same grouping key
+                cursor.execute('''
+                    SELECT * FROM entries 
+                    WHERE grouping_key = ? OR (date = ? AND application_name = ?)
+                    ORDER BY row_position ASC, id ASC
+                ''', (grouping_key, target_entry['date'], target_entry['application_name']))
+                
+                related_rows = cursor.fetchall()
+                related_dicts = [dict(zip(columns, row)) for row in related_rows]
+                
+                # Separate into main entry and child arrays
+                prbs = []
+                hiims = []
+                issues = []
+                
+                for row in related_dicts:
+                    if row['id'] == entry_id:
+                        # This is our main entry, keep it as target_entry
+                        continue
+                    elif row['row_type'] == 'prb':
+                        prbs.append({
+                            'id': row['id'],
+                            'prb_id_number': row['prb_id_number'],
+                            'prb_id_status': row['prb_id_status'],
+                            'prb_link': row['prb_link'],
+                            'created_at': row['created_at']
+                        })
+                    elif row['row_type'] == 'hiim':
+                        hiims.append({
+                            'id': row['id'],
+                            'hiim_id_number': row['hiim_id_number'],
+                            'hiim_id_status': row['hiim_id_status'],
+                            'hiim_link': row['hiim_link'],
+                            'created_at': row['created_at']
+                        })
+                    elif row['row_type'] == 'issue':
+                        issues.append({
+                            'id': row['id'],
+                            'description': row['issue_description'],
+                            'created_at': row['created_at']
+                        })
+                
+                # Attach child arrays to main entry
+                target_entry['prbs'] = prbs
+                target_entry['hiims'] = hiims
+                target_entry['issues'] = issues
+            else:
+                # For non-main entries, just return the entry with empty arrays
+                target_entry['prbs'] = []
+                target_entry['hiims'] = []
+                target_entry['issues'] = []
+            
+            conn.close()
+            return target_entry
+            
+        except Exception as e:
+            print(f"❌ Error in get_entry_by_id({entry_id}): {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return None
+    
+    def get_setting(self, key: str) -> Optional[str]:
+        """Get a setting value from the database"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT value FROM settings WHERE key = ?", (key,))
+        result = cursor.fetchone()
+        
+        conn.close()
+        return result[0] if result else None
+    
+    def set_setting(self, key: str, value: str) -> bool:
+        """Set a setting value in the database"""
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            
+            cursor.execute(
+                "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+                (key, value)
+            )
+            
+            conn.commit()
+            conn.close()
+            return True
+        except Exception:
+            return False
+
+
+class EntryManager:
+    """Entry manager for independent rows across multiple databases"""
+    
+    def __init__(self):
+        self.adapters = {
+            'CVAR ALL': IndependentRowSQLiteAdapter('', 'cvar_all.db'),
+            'CVAR NYQ': IndependentRowSQLiteAdapter('', 'cvar_nyq.db'),
+            'XVA': IndependentRowSQLiteAdapter('', 'xva.db'),
+            'REG': IndependentRowSQLiteAdapter('', 'reg.db'),
+            'OTHERS': IndependentRowSQLiteAdapter('', 'others.db')
+        }
+    
+    def get_entries_by_application(self, application_name: str, start_date: str = None, end_date: str = None) -> List[Dict]:
+        """Get entries for specific application"""
+        adapter = self.adapters.get(application_name.upper())
+        if not adapter:
+            return []
+        return adapter.get_entries_by_application(application_name, start_date, end_date)
+    
+    def get_entry_by_id(self, entry_id: int, application_name: str = None) -> Optional[Dict]:
+        """Get a specific entry by ID"""
+        if application_name:
+            # Search specific application database
+            adapter = self.adapters.get(application_name.upper())
+            if adapter:
+                return adapter.get_entry_by_id(entry_id, application_name)
+        else:
+            # Search all databases for the entry
+            for app_name, adapter in self.adapters.items():
+                try:
+                    entry = adapter.get_entry_by_id(entry_id)
+                    if entry:
+                        return entry
+                except Exception:
+                    continue
+        return None
+    
+    def create_entry(self, entry_data: Dict) -> Optional[Dict]:
+        """Create entry in appropriate database"""
+        application_name = entry_data.get('application_name', '').upper()
+        adapter = self.adapters.get(application_name)
+        if not adapter:
+            return None
+        return adapter.create_entry(entry_data)
+    
+    def update_entry(self, entry_id: int, entry_data: Dict, application_name: str = None) -> Optional[Dict]:
+        """Update entry in appropriate database"""
+        # Use provided application_name or extract from entry_data
+        if application_name:
+            target_app = application_name.upper()
+        else:
+            target_app = entry_data.get('application_name', '').upper()
+        
+        adapter = self.adapters.get(target_app)
+        if not adapter:
+            return None
+        return adapter.update_entry(entry_id, entry_data)
+    
+    def delete_entry(self, entry_id: int, application_name: str = None) -> bool:
+        """Delete entry from appropriate database"""
+        if application_name:
+            # Delete from specific application database
+            adapter = self.adapters.get(application_name.upper())
+            if not adapter:
+                return False
+            return adapter.delete_entry(entry_id)
+        else:
+            # Search all databases and delete from the one that contains the entry
+            for app_name, adapter in self.adapters.items():
+                try:
+                    if adapter.delete_entry(entry_id):
+                        return True
+                except Exception:
+                    continue
+            return False
+    
+    def get_all_entries(self) -> List[Dict]:
+        """Get all entries from all databases"""
+        all_entries = []
+        for app_name, adapter in self.adapters.items():
+            entries = adapter.get_all_entries()
+            all_entries.extend(entries)
+        return all_entries
+    
+    def get_setting(self, key: str, application_name: str = 'CVAR ALL') -> Optional[str]:
+        """Get a setting value from the appropriate database"""
+        adapter = self.adapters.get(application_name.upper())
+        if not adapter:
+            # Default to CVAR ALL if application not found
+            adapter = self.adapters.get('CVAR ALL')
+        return adapter.get_setting(key) if adapter else None
+    
+    def set_setting(self, key: str, value: str, application_name: str = 'CVAR ALL') -> bool:
+        """Set a setting value in the appropriate database"""
+        adapter = self.adapters.get(application_name.upper())
+        if not adapter:
+            # Default to CVAR ALL if application not found
+            adapter = self.adapters.get('CVAR ALL')
+        return adapter.set_setting(key, value) if adapter else False
+    
+    def _ensure_datasets_exist(self) -> bool:
+        """Ensure all database tables exist - they are created automatically"""
+        return True  # SQLite tables are created automatically in init_database()
