@@ -1373,12 +1373,21 @@ function calculateHiimCounts(entries) {
     };
 }
 
-// Function to calculate month-end Q and P counts for the current application
+// Function to calculate month-to-date Q and P counts for the current application
 async function calculateMonthEndCounts(month, year) {
     try {
         // Build API URL with date range for the entire month AND current application filter
         const startDate = new Date(year, month, 1);
-        const endDate = new Date(year, month + 1, 0);
+        let endDate = new Date(year, month + 1, 0); // Last day of the month
+        
+        // If this is the current month, only count up to today to show accurate counts
+        const today = new Date();
+        const isCurrentMonth = today.getFullYear() === year && today.getMonth() === month;
+        
+        if (isCurrentMonth) {
+            // Use today as end date if we're in the current month
+            endDate = today;
+        }
         
         const startDateStr = startDate.toISOString().split('T')[0];
         const endDateStr = endDate.toISOString().split('T')[0];
