@@ -432,6 +432,16 @@
                     <input type="date" id="entry-date" name="date" required max="">
                 </div>
                 
+                <!-- Infrastructure Weekend checkbox (only visible for Monday entries) -->
+                <div class="form-group infra-weekend-group" id="cvar-infra-weekend-group" style="display: none;">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="entry-infra-weekend" name="infra_weekend_manual">
+                        <span class="checkmark"></span>
+                        Weekend Infra
+                    </label>
+                    <small class="form-help">Check to mark this Monday as Weekend Infra</small>
+                </div>
+                
                 <div class="form-group non-xva-field">
                     <label for="entry-prc-mail">PRC Mail *</label>
                     <div class="combined-field">
@@ -519,6 +529,16 @@
                 <div class="form-group">
                     <label for="xva-entry-date">Date *</label>
                     <input type="date" id="xva-entry-date" name="date" required max="">
+                </div>
+                
+                <!-- Infrastructure Weekend checkbox (only visible for Monday entries) -->
+                <div class="form-group infra-weekend-group" id="xva-infra-weekend-group" style="display: none;">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="xva-entry-infra-weekend" name="infra_weekend_manual">
+                        <span class="checkmark"></span>
+                        Weekend Infra
+                    </label>
+                    <small class="form-help">Check to mark this Monday as Weekend Infra</small>
                 </div>
                 
                 <!-- singular issue_description removed in favor of repeatable Issues -->
@@ -633,6 +653,16 @@
                     <input type="date" id="reg-entry-date" name="date" required max="">
                 </div>
                 
+                <!-- Infrastructure Weekend checkbox (only visible for Monday entries) -->
+                <div class="form-group infra-weekend-group" id="reg-infra-weekend-group" style="display: none;">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="reg-entry-infra-weekend" name="infra_weekend_manual">
+                        <span class="checkmark"></span>
+                        Weekend Infra
+                    </label>
+                    <small class="form-help">Check to mark this Monday as Weekend Infra</small>
+                </div>
+                
                 <div class="form-group">
                     <label for="reg-entry-closing">Closing</label>
                     <select id="reg-entry-closing" name="closing" class="status-select">
@@ -698,6 +728,16 @@
                 <div class="form-group">
                     <label for="others-entry-date">Date *</label>
                     <input type="date" id="others-entry-date" name="date" required max="">
+                </div>
+                
+                <!-- Infrastructure Weekend checkbox (only visible for Monday entries) -->
+                <div class="form-group infra-weekend-group" id="others-infra-weekend-group" style="display: none;">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="others-entry-infra-weekend" name="infra_weekend_manual">
+                        <span class="checkmark"></span>
+                        Weekend Infra
+                    </label>
+                    <small class="form-help">Check to mark this Monday as Weekend Infra</small>
                 </div>
                 
                 <div class="form-group">

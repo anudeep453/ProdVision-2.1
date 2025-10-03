@@ -178,6 +178,9 @@ function setupEventListeners() {
     // Time formatting for PRC Mail and CP Alerts
     setupTimeFormatting();
     
+    // Infrastructure weekend logic setup
+    setupInfraWeekendLogic();
+    
     // Charts modal
     if (viewChartsBtn) {
         viewChartsBtn.addEventListener('click', showChartsModal);
@@ -2041,7 +2044,7 @@ function createEntryRow(entry, isFirstRow, itemType, entryId, childCount) {
     }
     
     // Get day of week (only show on first row)
-    const dayOfWeek = isFirstRow ? getDayOfWeek(entry.date) : '';
+    const dayOfWeek = isFirstRow ? getDayOfWeek(entry.date, entry.infra_weekend_manual) : '';
     
     // Show common fields only on first row, leave empty on sub-rows
     const prcMailDisplay = isFirstRow ? prcMailBadge : '';
@@ -3127,6 +3130,9 @@ function showEntryModal(entry = null) {
     addFormChangeListeners(regEntryForm);
     addFormChangeListeners(othersEntryForm);
     
+    // Setup infrastructure weekend logic after forms are ready
+    setupInfraWeekendLogic();
+    
     entryModal.style.display = 'flex';
 }
 
@@ -3214,6 +3220,15 @@ async function loadXVAData() {
 function populateCVAREntryForm(entry) {
     document.getElementById('entry-date').value = entry.date;
     
+    // Set infrastructure weekend checkbox state
+    const infraCheckbox = document.getElementById('entry-infra-weekend');
+    if (infraCheckbox) {
+        infraCheckbox.checked = entry.infra_weekend_manual === 1;
+        if (entry.infra_weekend_manual !== null) {
+            infraCheckbox.setAttribute('data-manually-set', 'true');
+        }
+    }
+    
     // Set PRC Mail time (24-hour format)
     document.getElementById('entry-prc-mail-text').value = entry.prc_mail_text || '';
     document.getElementById('entry-prc-mail-status').value = entry.prc_mail_status || '';
@@ -3231,6 +3246,16 @@ function populateCVAREntryForm(entry) {
 
 function populateXVAEntryForm(entry) {
     document.getElementById('xva-entry-date').value = entry.date;
+    
+    // Set infrastructure weekend checkbox state
+    const infraCheckbox = document.getElementById('xva-entry-infra-weekend');
+    if (infraCheckbox) {
+        infraCheckbox.checked = entry.infra_weekend_manual === 1;
+        if (entry.infra_weekend_manual !== null) {
+            infraCheckbox.setAttribute('data-manually-set', 'true');
+        }
+    }
+    
     // Note: singular legacy PRB/HIIM/issue fields removed from XVA form. Repeatable containers will be populated below.
     
     // XVA specific fields - timing fields (24-hour format)
@@ -3264,6 +3289,16 @@ function populateXVAEntryForm(entry) {
 
 function populateREGEntryForm(entry) {
     document.getElementById('reg-entry-date').value = entry.date;
+    
+    // Set infrastructure weekend checkbox state
+    const infraCheckbox = document.getElementById('reg-entry-infra-weekend');
+    if (infraCheckbox) {
+        infraCheckbox.checked = entry.infra_weekend_manual === 1;
+        if (entry.infra_weekend_manual !== null) {
+            infraCheckbox.setAttribute('data-manually-set', 'true');
+        }
+    }
+    
     // reg-entry-id removed
     const closingSelect = document.getElementById('reg-entry-closing');
     if (closingSelect) {
@@ -3304,6 +3339,16 @@ function populateREGEntryForm(entry) {
 
 function populateOTHERSEntryForm(entry) {
     document.getElementById('others-entry-date').value = entry.date;
+    
+    // Set infrastructure weekend checkbox state
+    const infraCheckbox = document.getElementById('others-entry-infra-weekend');
+    if (infraCheckbox) {
+        infraCheckbox.checked = entry.infra_weekend_manual === 1;
+        if (entry.infra_weekend_manual !== null) {
+            infraCheckbox.setAttribute('data-manually-set', 'true');
+        }
+    }
+    
     document.getElementById('others-entry-dare').value = entry.dare || '';
     document.getElementById('others-entry-timings').value = entry.timings || '';
     document.getElementById('others-entry-puntuality-issue').value = entry.puntuality_issue || '';
@@ -4112,6 +4157,14 @@ async function handleCVAREntrySubmit(event) {
         hiim_link: formData.get('hiim_link'),
         remarks: formData.get('remarks'),
         time_loss: serializeTimeLossFor(false),
+        // Infrastructure weekend manual flag (null = auto-detect, 0 = manually unchecked, 1 = manually checked)
+        infra_weekend_manual: (() => {
+            const checkbox = document.getElementById('entry-infra-weekend');
+            if (checkbox && checkbox.hasAttribute('data-manually-set')) {
+                return checkbox.checked ? 1 : 0;
+            }
+            return null; // Auto-detect
+        })(),
     // CVAR specific fields - 24-hour format times
         prc_mail_text: prcMailTime || '',
         prc_mail_status: formData.get('prc_mail_status'),
@@ -4235,6 +4288,14 @@ async function handleXVAEntrySubmit(event) {
         hiim_id_status: formData.get('hiim_id_status'),
         hiim_link: formData.get('hiim_link'),
         remarks: formData.get('remarks'),
+        // Infrastructure weekend manual flag (null = auto-detect, 0 = manually unchecked, 1 = manually checked)
+        infra_weekend_manual: (() => {
+            const checkbox = document.getElementById('xva-entry-infra-weekend');
+            if (checkbox && checkbox.hasAttribute('data-manually-set')) {
+                return checkbox.checked ? 1 : 0;
+            }
+            return null; // Auto-detect
+        })(),
         // XVA specific fields - 24-hour format times
         acq_text: acqTime || '',
         valo_text: valoTime || '',
@@ -4336,6 +4397,14 @@ async function handleREGEntrySubmit(event) {
         date: formData.get('date'),
         day: new Date(formData.get('date')).toLocaleDateString('en-US', { weekday: 'long' }),
         application_name: 'REG',
+        // Infrastructure weekend manual flag (null = auto-detect, 0 = manually unchecked, 1 = manually checked)
+        infra_weekend_manual: (() => {
+            const checkbox = document.getElementById('reg-entry-infra-weekend');
+            if (checkbox && checkbox.hasAttribute('data-manually-set')) {
+                return checkbox.checked ? 1 : 0;
+            }
+            return null; // Auto-detect
+        })(),
     // reg_id removed
         closing: formData.get('closing'),
         iteration: formData.get('iteration'),
@@ -4387,6 +4456,14 @@ async function handleOTHERSEntrySubmit(event) {
         date: formData.get('date'),
         day: new Date(formData.get('date')).toLocaleDateString('en-US', { weekday: 'long' }),
         application_name: 'OTHERS',
+        // Infrastructure weekend manual flag (null = auto-detect, 0 = manually unchecked, 1 = manually checked)
+        infra_weekend_manual: (() => {
+            const checkbox = document.getElementById('others-entry-infra-weekend');
+            if (checkbox && checkbox.hasAttribute('data-manually-set')) {
+                return checkbox.checked ? 1 : 0;
+            }
+            return null; // Auto-detect
+        })(),
         dare: formData.get('dare'),
         timings: formData.get('timings'),
         puntuality_issue: formData.get('puntuality_issue'),
@@ -5796,6 +5873,53 @@ function formatMonthLabel(monthKey) {
     return date.toLocaleDateString('en-US', { year: 'numeric', month: 'long' });
 }
 
+// Infrastructure Weekend Monday Detection
+function isThirdMondayOfMonth(dateString) {
+    const date = new Date(dateString);
+    
+    // Check if it's a Monday
+    if (date.getDay() !== 1) {
+        return false;
+    }
+    
+    const year = date.getFullYear();
+    const month = date.getMonth();
+    
+    // Find all Mondays in the month
+    const mondays = [];
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    
+    // Find the first Monday of the month
+    const firstMonday = new Date(firstDay);
+    const daysToMonday = (1 - firstDay.getDay() + 7) % 7;
+    firstMonday.setDate(firstDay.getDate() + daysToMonday);
+    
+    // Collect all Mondays in the month
+    const currentMonday = new Date(firstMonday);
+    while (currentMonday.getMonth() === month) {
+        mondays.push(currentMonday.getDate());
+        currentMonday.setDate(currentMonday.getDate() + 7);
+    }
+    
+    // Check if the given date is the 3rd Monday (index 2)
+    return mondays.length >= 3 && date.getDate() === mondays[2];
+}
+
+function isMonday(dateString) {
+    const date = new Date(dateString);
+    return date.getDay() === 1;
+}
+
+function shouldShowInfraWeek(dateString, manualFlag) {
+    // Manual flag takes precedence: 1 = show, 0 = hide, null/undefined = auto-detect
+    if (manualFlag === 1) return true;
+    if (manualFlag === 0) return false;
+    
+    // Auto-detect: show if it's the 3rd Monday of the month
+    return isMonday(dateString) && isThirdMondayOfMonth(dateString);
+}
+
 // Time-based color logic
 function getTimeBasedColor(timeText, dateString, application, fieldType) {
     const date = new Date(dateString);
@@ -5904,14 +6028,20 @@ function formatDate(dateString) {
     return date.toLocaleDateString();
 }
 
-function getDayOfWeek(dateString) {
+function getDayOfWeek(dateString, infraWeekendManual = null) {
     const date = new Date(dateString);
     const dayOfWeek = date.getDay();
     const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
     const shortDayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     
-    // Return short day name for better table display
-    return shortDayNames[dayOfWeek];
+    const dayName = shortDayNames[dayOfWeek];
+    
+    // Check if we should show "Infra Week" for Monday entries
+    if (dayOfWeek === 1 && shouldShowInfraWeek(dateString, infraWeekendManual)) {
+        return `${dayName}<br><small class="infra-week-label">Infra Week</small>`;
+    }
+    
+    return dayName;
 }
 
 function getDefaultEntryDate() {
@@ -5960,6 +6090,63 @@ function showLoading() {
 function hideLoading() {
     applyFiltersBtn.innerHTML = 'Apply Filters';
     applyFiltersBtn.disabled = false;
+}
+
+// Infrastructure Weekend Logic
+function setupInfraWeekendLogic() {
+    // Get all date inputs and their corresponding checkboxes
+    const dateInputs = [
+        { dateId: 'entry-date', checkboxId: 'entry-infra-weekend', groupId: 'cvar-infra-weekend-group' },
+        { dateId: 'xva-entry-date', checkboxId: 'xva-entry-infra-weekend', groupId: 'xva-infra-weekend-group' },
+        { dateId: 'reg-entry-date', checkboxId: 'reg-entry-infra-weekend', groupId: 'reg-infra-weekend-group' },
+        { dateId: 'others-entry-date', checkboxId: 'others-entry-infra-weekend', groupId: 'others-infra-weekend-group' }
+    ];
+    
+    dateInputs.forEach(({ dateId, checkboxId, groupId }) => {
+        const dateInput = document.getElementById(dateId);
+        const checkbox = document.getElementById(checkboxId);
+        const group = document.getElementById(groupId);
+        
+        if (dateInput && checkbox && group) {
+            dateInput.addEventListener('change', function() {
+                handleDateChangeForInfraWeekend(this.value, checkbox, group);
+            });
+            
+            // Trigger change event if date input already has a value (for edit mode)
+            if (dateInput.value) {
+                handleDateChangeForInfraWeekend(dateInput.value, checkbox, group);
+            }
+        }
+    });
+}
+
+function handleDateChangeForInfraWeekend(dateValue, checkbox, group) {
+    if (!dateValue) {
+        group.style.display = 'none';
+        return;
+    }
+    
+    // Show checkbox only for Monday entries
+    if (isMonday(dateValue)) {
+        group.style.display = 'block';
+        
+        // Auto-check if it's the 3rd Monday and not manually set
+        if (isThirdMondayOfMonth(dateValue) && !checkbox.hasAttribute('data-manually-set')) {
+            checkbox.checked = true;
+        }
+    } else {
+        group.style.display = 'none';
+        checkbox.checked = false;
+        checkbox.removeAttribute('data-manually-set');
+    }
+    
+    // Mark as manually set when user interacts with checkbox (only add listener if not already added)
+    if (!checkbox.hasAttribute('data-listener-added')) {
+        checkbox.addEventListener('change', function() {
+            this.setAttribute('data-manually-set', 'true');
+        });
+        checkbox.setAttribute('data-listener-added', 'true');
+    }
 }
 
 // Time formatting functions

@@ -104,6 +104,10 @@ class IndependentRowSQLiteAdapter:
                 -- Time Loss fields (applicable to CVAR applications)
                 time_loss TEXT,
                 
+                -- Manual Infrastructure Weekend flag for Monday entries
+                -- NULL = auto-detect 3rd Monday, 0 = manually unchecked, 1 = manually checked
+                infra_weekend_manual INTEGER DEFAULT NULL,
+                
                 -- Timestamps
                 created_at TEXT,
                 updated_at TEXT
@@ -128,7 +132,8 @@ class IndependentRowSQLiteAdapter:
             ('grouping_key', 'TEXT'),
             ('row_type', "TEXT DEFAULT 'main' CHECK(row_type IN ('main', 'prb', 'hiim', 'issue'))"),
             ('row_position', 'INTEGER DEFAULT 0'),
-            ('time_loss', 'TEXT')
+            ('time_loss', 'TEXT'),
+            ('infra_weekend_manual', 'INTEGER DEFAULT NULL')  # NULL = auto-detect, 0 = manually unchecked, 1 = manually checked
         ]
         
         for column_name, column_def in missing_columns:
@@ -209,6 +214,7 @@ class IndependentRowSQLiteAdapter:
                 'others_prb': entry_data.get('others_prb', ''),
                 'others_hiim': entry_data.get('others_hiim', ''),
                 'time_loss': entry_data.get('time_loss', ''),
+                'infra_weekend_manual': entry_data.get('infra_weekend_manual'),
                 'created_at': now,
                 'updated_at': now
             }
