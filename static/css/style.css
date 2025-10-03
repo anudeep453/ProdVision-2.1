@@ -3694,8 +3694,8 @@ body.edit-mode .edit-column {
     }
 }
 
-/* Weekend and Weekly Styling */
-  .week-header {
+/* Month-based Timeline Styling (replacing weekend logic) */
+  .month-header {
      background: #667eea !important;
      color: white !important;
      font-weight: 700;
@@ -3705,10 +3705,10 @@ body.edit-mode .edit-column {
      z-index: 10;
 }
 
-/* Override any nth-child selectors for week headers */
-tr.week-header,
-tr.week-header:nth-child(even),
-tr.week-header:nth-child(odd) {
+/* Override any nth-child selectors for month headers */
+tr.month-header,
+tr.month-header:nth-child(even),
+tr.month-header:nth-child(odd) {
     background: #667eea !important;
     color: white !important;
     display: table-row !important;
@@ -3717,7 +3717,7 @@ tr.week-header:nth-child(odd) {
     min-height: 40px !important;
 }
 
-.week-header-cell {
+.month-header-cell {
     padding: 10px 20px !important;
     border: none !important;
     background: #667eea !important;
@@ -3726,10 +3726,10 @@ tr.week-header:nth-child(odd) {
     text-shadow: 0 1px 2px rgba(102, 126, 234, 0.3);
 }
 
-/* Ensure week headers override any table row styling */
-.data-table tbody tr.week-header,
-.data-table tbody tr.week-header:nth-child(even),
-.data-table tbody tr.week-header:nth-child(odd) {
+/* Ensure month headers override any table row styling */
+.data-table tbody tr.month-header,
+.data-table tbody tr.month-header:nth-child(even),
+.data-table tbody tr.month-header:nth-child(odd) {
     background: #667eea !important;
     color: white !important;
     display: table-row !important;
@@ -3738,9 +3738,9 @@ tr.week-header:nth-child(odd) {
     min-height: 40px !important;
 }
 
-.data-table tbody tr.week-header td,
-.data-table tbody tr.week-header:nth-child(even) td,
-.data-table tbody tr.week-header:nth-child(odd) td {
+.data-table tbody tr.month-header td,
+.data-table tbody tr.month-header:nth-child(even) td,
+.data-table tbody tr.month-header:nth-child(odd) td {
     background: #667eea !important;
     color: white !important;
     display: table-cell !important;
@@ -3749,8 +3749,8 @@ tr.week-header:nth-child(odd) {
     min-height: 40px !important;
 }
 
-/* Force week headers to be visible with high specificity */
-#entries-table tbody tr.week-header {
+/* Force month headers to be visible with high specificity */
+#entries-table tbody tr.month-header {
     background: #667eea !important;
     color: white !important;
     display: table-row !important;
@@ -3759,8 +3759,8 @@ tr.week-header:nth-child(odd) {
     min-height: 40px !important;
 }
 
-/* Override week header visibility during search */
-#entries-table tbody tr.week-header.search-hidden {
+/* Override month header visibility during search */
+#entries-table tbody tr.month-header.search-hidden {
     display: none !important;
     visibility: hidden !important;
     height: 0 !important;
@@ -3768,7 +3768,7 @@ tr.week-header:nth-child(odd) {
     opacity: 0 !important;
 }
 
-#entries-table tbody tr.week-header td {
+#entries-table tbody tr.month-header td {
     background: #667eea !important;
     color: white !important;
     display: table-cell !important;
@@ -3777,8 +3777,8 @@ tr.week-header:nth-child(odd) {
     min-height: 40px !important;
 }
 
-/* Hide week header cells during search */
-#entries-table tbody tr.week-header.search-hidden td {
+/* Hide month header cells during search */
+#entries-table tbody tr.month-header.search-hidden td {
     display: none !important;
     visibility: hidden !important;
     height: 0 !important;
@@ -3786,7 +3786,7 @@ tr.week-header:nth-child(odd) {
     opacity: 0 !important;
 }
 
-.week-header-content {
+.month-header-content {
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -3796,14 +3796,14 @@ tr.week-header:nth-child(odd) {
     text-shadow: 0 1px 2px rgba(102, 126, 234, 0.3);
 }
 
-.week-title {
+.month-title {
     font-size: 1rem;
     font-weight: 700;
     text-shadow: 0 1px 2px rgba(102, 126, 234, 0.3);
     color: white;
 }
 
-.week-metrics {
+.month-metrics {
     display: flex;
     gap: 6px;
     flex-wrap: wrap;
@@ -3840,23 +3840,6 @@ tr.week-header:nth-child(odd) {
     border-radius: 20px;
     font-size: 0.9rem;
     font-weight: 500;
-}
-
-.infra-weekend-badge {
-    background: #ff6b35;
-    color: white;
-    padding: 4px 12px;
-    border-radius: 15px;
-    font-size: 0.85rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    box-shadow: 0 2px 4px rgba(255, 107, 53, 0.3);
-    animation: pulse 2s infinite;
-}
-
-.weekend-row {
-    background-color: #f7fafc !important;
 }
 
 /* Styles for grouped entry rows */
@@ -3943,31 +3926,6 @@ tr:not(.sub-row) + .sub-row td {
     min-width: 60px;
     color: #495057;
 }
-
-/* Weekend day styling */
-.weekend-row .day-column {
-    background-color: #fef5e7;
-    color: #744210;
-    font-weight: 700;
-}
-
-.weekend-row:hover {
-    background-color: #e9ecef !important;
-}
-
-.weekend-indicator {
-    background-color: #f6ad55;
-    color: #744210;
-    padding: 2px 8px;
-    border-radius: 12px;
-    font-size: 0.8rem;
-    font-weight: 600;
-    margin-left: 8px;
-    display: inline-block;
-    white-space: nowrap;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-}
-
 
 /* Multi-items styling for Issues, PRBs, and HIIMs */
 .multi-items-group {
@@ -4465,16 +4423,9 @@ tr:not(.sub-row) + .sub-row td {
     }
 }
 
-/* Responsive adjustments for weekend indicators */
+/* Responsive adjustments for month headers */
 @media (max-width: 768px) {
-    .weekend-indicator {
-        display: block;
-        margin-left: 0;
-        margin-top: 4px;
-        width: fit-content;
-    }
-    
-    .week-header-content {
+    .month-header-content {
         flex-direction: column;
         align-items: flex-start;
         gap: 8px;

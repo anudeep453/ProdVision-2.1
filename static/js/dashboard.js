@@ -178,9 +178,6 @@ function setupEventListeners() {
     // Time formatting for PRC Mail and CP Alerts
     setupTimeFormatting();
     
-    // Weekend warning for date changes
-    setupWeekendWarning();
-    
     // Charts modal
     if (viewChartsBtn) {
         viewChartsBtn.addEventListener('click', showChartsModal);
@@ -1519,101 +1516,66 @@ function displayIndividualRows(entries) {
 
 function displayGroupedEntries(entries) {
     /**
-     * Normal display logic: Group entries by week and expand multi-item entries
+     * Display entries grouped by month with month labels instead of weekend logic
      */
     
-    // Group entries by week
-    const weeklyGroups = {};
+    // Group entries by month
+    const monthlyGroups = {};
     entries.forEach(entry => {
-        const weekStart = getWeekStartDate(entry.date);
-        if (!weeklyGroups[weekStart]) {
-            weeklyGroups[weekStart] = [];
+        const monthKey = getMonthKey(entry.date);
+        if (!monthlyGroups[monthKey]) {
+            monthlyGroups[monthKey] = [];
         }
-        weeklyGroups[weekStart].push(entry);
+        monthlyGroups[monthKey].push(entry);
     });
     
-    // Sort weeks by date (newest first)
-    const sortedWeeks = Object.keys(weeklyGroups).sort((a, b) => new Date(b) - new Date(a));
+    // Sort months by date (newest first)
+    const sortedMonths = Object.keys(monthlyGroups).sort((a, b) => new Date(b) - new Date(a));
     
-    sortedWeeks.forEach(weekStart => {
-        const weekEntries = weeklyGroups[weekStart];
+    sortedMonths.forEach(monthKey => {
+        const monthEntries = monthlyGroups[monthKey];
         
-        // Check if this is the 3rd weekend of the month
-        const isInfraWeekend = isThirdWeekendOfMonth(weekStart);
+        // Add month header
+        const monthHeaderRow = document.createElement('tr');
+        monthHeaderRow.className = 'month-header';
         
-        // Add week header
-        const weekHeaderRow = document.createElement('tr');
-        weekHeaderRow.className = 'week-header';
-        // Check if this is a month-end week
-        const weekStartDate = new Date(weekStart);
-        const weekEndDate = new Date(weekStartDate);
-        weekEndDate.setDate(weekStartDate.getDate() + 6);
-        
-        // Check if this is the last week of the month
-        const lastDayOfMonth = new Date(weekStartDate.getFullYear(), weekStartDate.getMonth() + 1, 0);
-        const lastDay = lastDayOfMonth.getDate();
-        
-        // Check if this is the last week of the month
-        // Either the week spans across months OR the week contains the last day of the month
-        // But only if this week actually contains entries for the current month
-        const weekContainsCurrentMonthData = weekEntries.some(entry => {
-            const entryDate = new Date(entry.date);
-            return entryDate.getMonth() === weekStartDate.getMonth() && 
-                   entryDate.getFullYear() === weekStartDate.getFullYear();
-        });
-        
-        const isMonthEndWeek = weekContainsCurrentMonthData && (
-            weekStartDate.getMonth() !== weekEndDate.getMonth() || 
-            weekEndDate.getDate() >= lastDay
-        );
-        
-        // Calculate red counts for entire month (only if month-end week)
+        // Calculate red counts for the month
         let qualityRedCount = 0;
         let punctualityRedCount = 0;
         
-        if (isMonthEndWeek) {
-            // Get all entries for the current month (need to fetch all data, not just filtered)
-            const currentMonth = weekStartDate.getMonth();
-            const currentYear = weekStartDate.getFullYear();
+        const [year, month] = monthKey.split('-');
+        calculateMonthEndCounts(parseInt(month) - 1, parseInt(year)).then(counts => {
+            qualityRedCount = counts.quality;
+            punctualityRedCount = counts.punctuality;
             
-            // Calculate Q and P counts for the entire month using all entries
-            // We need to fetch all entries for the month, not just the filtered ones
-            calculateMonthEndCounts(currentMonth, currentYear).then(counts => {
-                qualityRedCount = counts.quality;
-                punctualityRedCount = counts.punctuality;
-                
-                // Update the week header with the correct counts
-                const weekMetricsDiv = weekHeaderRow.querySelector('.week-metrics');
-                if (weekMetricsDiv) {
-                    weekMetricsDiv.innerHTML = `
-                        ${qualityRedCount > 0 ? `<span class="metric-badge quality-red">Q: ${qualityRedCount}</span>` : ''}
-                        ${punctualityRedCount > 0 ? `<span class="metric-badge punctuality-red">P: ${punctualityRedCount}</span>` : ''}
-                    `;
-                }
-            });
-        }
+            // Update the month header with the correct counts
+            const monthMetricsDiv = monthHeaderRow.querySelector('.month-metrics');
+            if (monthMetricsDiv) {
+                monthMetricsDiv.innerHTML = `
+                    ${qualityRedCount > 0 ? `<span class="metric-badge quality-red">Q: ${qualityRedCount}</span>` : ''}
+                    ${punctualityRedCount > 0 ? `<span class="metric-badge punctuality-red">P: ${punctualityRedCount}</span>` : ''}
+                `;
+            }
+        });
         
         // Calculate colspan based on visible columns for current application
         const visibleColumns = getVisibleColumnsForApplication(filters.application);
         const colspan = visibleColumns.length;
         
-        weekHeaderRow.innerHTML = `
-            <td colspan="${colspan}" class="week-header-cell">
-                <div class="week-header-content">
-                    <span class="week-title">${formatWeekRange(weekStart)}</span>
-                    ${isInfraWeekend ? '<span class="infra-weekend-badge">Infra weekend</span>' : ''}
-                    ${isMonthEndWeek ? `
-                        <div class="week-metrics">
-                            <span class="loading">Loading Q & P counts...</span>
-                        </div>
-                    ` : ''}
+        monthHeaderRow.innerHTML = `
+            <td colspan="${colspan}" class="month-header-cell">
+                <div class="month-header-content">
+                    <span class="month-title">${formatMonthLabel(monthKey)}</span>
+                    <div class="month-metrics">
+                        <span class="loading">Loading Q & P counts...</span>
+                    </div>
                 </div>
             </td>
         `;
-        entriesTbody.appendChild(weekHeaderRow);
+        entriesTbody.appendChild(monthHeaderRow);
         
-        // Add entries for this week, expanding multiple items per date into separate rows
-        weekEntries.forEach(entry => {
+        // Add entries for this month, expanding multiple items per date into separate rows
+        monthEntries.forEach(entry => {
             const expandedRows = createExpandedEntryRows(entry);
             expandedRows.forEach(row => {
                 entriesTbody.appendChild(row);
@@ -1889,12 +1851,6 @@ function createEntryRow(entry, isFirstRow, itemType, entryId, childCount) {
 
     
     
-    // Check if it's a weekend
-    const isWeekendDay = isWeekend(entry.date);
-    if (isWeekendDay) {
-        row.classList.add('weekend-row');
-    }
-    
     // Parse combined fields
     const prcMailText = entry.prc_mail_text || '';
     const prcMailStatus = entry.prc_mail_status || '';
@@ -2063,12 +2019,10 @@ function createEntryRow(entry, isFirstRow, itemType, entryId, childCount) {
     const qualityClass = entry.quality_status ? `quality-${entry.quality_status.toLowerCase()}` : '';
     const qualityBadge = entry.quality_status ? `<span class="quality-badge ${qualityClass}">${entry.quality_status}</span>` : 'N/A';
     
-    // Format date with weekend indicator and expand button (only show on first row)
+    // Format date with expand button (only show on first row)
     let dateDisplay = '';
     if (isFirstRow) {
-        const baseDateDisplay = isWeekendDay ? 
-            `${formatDate(entry.date)} <span class="weekend-indicator">🏖️ Holiday - No Batch</span>` : 
-            formatDate(entry.date);
+        const baseDateDisplay = formatDate(entry.date);
         
         // Add expand button if there are child rows
         if (childCount > 0) {
@@ -3107,11 +3061,6 @@ function showEntryModal(entry = null) {
             // Set default date based on current day
             const defaultDate = getDefaultEntryDate();
             document.getElementById('xva-entry-date').value = defaultDate;
-            
-            // Check if the default date is a weekend and show warning
-            if (isWeekend(defaultDate)) {
-                showWeekendWarning();
-            }
         }
     } else if (filters.application === 'REG') {
         cvarEntryForm.style.display = 'none';
@@ -3130,11 +3079,6 @@ function showEntryModal(entry = null) {
             // Set default date based on current day
             const defaultDate = getDefaultEntryDate();
             document.getElementById('reg-entry-date').value = defaultDate;
-            
-            // Check if the default date is a weekend and show warning
-            if (isWeekend(defaultDate)) {
-                showWeekendWarning();
-            }
         }
     } else if (filters.application === 'OTHERS') {
         cvarEntryForm.style.display = 'none';
@@ -3153,11 +3097,6 @@ function showEntryModal(entry = null) {
             // Set default date based on current day
             const defaultDate = getDefaultEntryDate();
             document.getElementById('others-entry-date').value = defaultDate;
-            
-            // Check if the default date is a weekend and show warning
-            if (isWeekend(defaultDate)) {
-                showWeekendWarning();
-            }
         }
     } else {
         xvaEntryForm.style.display = 'none';
@@ -3176,11 +3115,6 @@ function showEntryModal(entry = null) {
             // Set default date based on current day
             const defaultDate = getDefaultEntryDate();
             document.getElementById('entry-date').value = defaultDate;
-            
-            // Check if the default date is a weekend and show warning
-            if (isWeekend(defaultDate)) {
-                showWeekendWarning();
-            }
         }
     }
     
@@ -3196,30 +3130,6 @@ function showEntryModal(entry = null) {
     entryModal.style.display = 'flex';
 }
 
-function showWeekendWarning() {
-    // Weekend warning functionality - no visual display
-    let warningDiv = document.getElementById('weekend-warning');
-    if (!warningDiv) {
-        warningDiv = document.createElement('div');
-        warningDiv.id = 'weekend-warning';
-        warningDiv.className = 'weekend-warning';
-        warningDiv.style.display = 'none';
-        
-        // Insert after the modal title
-        const modalHeader = document.querySelector('.modal-header');
-        modalHeader.insertAdjacentElement('afterend', warningDiv);
-    } else {
-        warningDiv.style.display = 'none';
-    }
-}
-
-function hideWeekendWarning() {
-    const warningDiv = document.getElementById('weekend-warning');
-    if (warningDiv) {
-        warningDiv.style.display = 'none';
-    }
-}
-
 function hideEntryModal() {
     // Disable form protection when closing modal
     disableFormProtection();
@@ -3232,7 +3142,6 @@ function hideEntryModal() {
     clearContainerItems('combined-items-container');
     clearContainerItems('xva-combined-items-container');
     currentEntryId = null;
-    hideWeekendWarning();
 }
 
 function showChartsModal() {
@@ -5875,103 +5784,22 @@ function createFullscreenHIIMChartWithData(ctx, hiimData, monthlyData) {
         });
 }
 
-// Weekend and weekly logic
-function isWeekend(dateString) {
+// Month-based grouping functions (replacing weekend logic)
+function getMonthKey(dateString) {
     const date = new Date(dateString);
-    const dayOfWeek = date.getDay();
-    return dayOfWeek === 0 || dayOfWeek === 6; // Sunday = 0, Saturday = 6
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
 }
 
-function getWeekNumber(dateString) {
-    const date = new Date(dateString);
-    const startOfYear = new Date(date.getFullYear(), 0, 1);
-    const days = Math.floor((date - startOfYear) / (24 * 60 * 60 * 1000));
-    return Math.ceil((days + startOfYear.getDay() + 1) / 7);
-}
-
-function getWeekStartDate(dateString) {
-    const date = new Date(dateString);
-    const dayOfWeek = date.getDay();
-    const diff = date.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1); // Adjust when day is Sunday
-    const weekStart = new Date(date.setDate(diff));
-    return weekStart.toISOString().split('T')[0];
-}
-
-function formatWeekRange(weekStartDate) {
-    const start = new Date(weekStartDate);
-    const end = new Date(start);
-    end.setDate(start.getDate() + 6);
-    
-    const startStr = start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    const endStr = end.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    
-    return `Week of ${startStr} - ${endStr}`;
-}
-
-function isThirdWeekendOfMonth(weekStartDate) {
-    const start = new Date(weekStartDate);
-    const month = start.getMonth();
-    const year = start.getFullYear();
-    
-    // Find all weekends (Saturday-Sunday pairs) in the month
-    const weekendPairs = [];
-    const firstDay = new Date(year, month, 1);
-    const lastDay = new Date(year, month + 1, 0);
-    
-    // Check each day of the month to find weekend pairs
-    for (let day = 1; day <= lastDay.getDate(); day++) {
-        const date = new Date(year, month, day);
-        const dayOfWeek = date.getDay();
-        
-        // If it's a Saturday, check if the next day (Sunday) is also in the same month
-        if (dayOfWeek === 6) { // Saturday
-            const nextDay = new Date(year, month, day + 1);
-            if (nextDay.getMonth() === month) { // Sunday is in the same month
-                weekendPairs.push({ saturday: day, sunday: day + 1 });
-            }
-        }
-    }
-    
-    // Check if this week contains the 3rd weekend pair
-    const weekEnd = new Date(start);
-    weekEnd.setDate(start.getDate() + 6);
-    
-    // Find the 3rd weekend pair (0-indexed, so [2] is the 3rd weekend)
-    const thirdWeekend = weekendPairs[2];
-    
-    if (thirdWeekend) {
-        const thirdWeekendSaturday = new Date(year, month, thirdWeekend.saturday);
-        const thirdWeekendSunday = new Date(year, month, thirdWeekend.sunday);
-        
-        // Check if this week contains either the Saturday or Sunday of the 3rd weekend
-        return (thirdWeekendSaturday >= start && thirdWeekendSaturday <= weekEnd) ||
-               (thirdWeekendSunday >= start && thirdWeekendSunday <= weekEnd);
-    }
-    
-    return false;
-}
-
-function isMondayAfterInfraWeekend(dateString) {
-    const date = new Date(dateString);
-    
-    // Check if it's a Monday
-    if (date.getDay() !== 1) {
-        return false;
-    }
-    
-    // Get the previous week's start date
-    const previousWeekStart = new Date(date);
-    previousWeekStart.setDate(date.getDate() - 7);
-    
-    // Check if the previous week was an Infra weekend
-    return isThirdWeekendOfMonth(previousWeekStart.toISOString().split('T')[0]);
+function formatMonthLabel(monthKey) {
+    const [year, month] = monthKey.split('-');
+    const date = new Date(parseInt(year), parseInt(month) - 1, 1);
+    return date.toLocaleDateString('en-US', { year: 'numeric', month: 'long' });
 }
 
 // Time-based color logic
 function getTimeBasedColor(timeText, dateString, application, fieldType) {
     const date = new Date(dateString);
     const isMonday = date.getDay() === 1;
-    const isMondayAfterInfra = isMondayAfterInfraWeekend(dateString);
     
     // Parse time from text (format: "HH:MM AM/PM" or "HH:MM")
     const timeMatch = timeText.match(/(\d{1,2}):(\d{2})\s*(AM|PM|am|pm)?/i);
@@ -6002,17 +5830,11 @@ function getTimeBasedColor(timeText, dateString, application, fieldType) {
     
     const timeInMinutes = hour * 60 + minute;
     
-    // Special Monday logic
+    // Special Monday logic (simplified - no weekend infrastructure logic)
     if (isMonday) {
-        // PRC Mail on Monday: Always Green (except after Infra weekend)
+        // PRC Mail on Monday: Always Green
         if (fieldType === 'prc_mail') {
-            if (isMondayAfterInfra) {
-                // After Infra weekend: Follow normal time-based rules
-                return getTimeBasedColorForApplication(timeInMinutes, application);
-            } else {
-                // Regular Monday: Always Green
-                return 'Green';
-            }
+            return 'Green';
         }
         // CP Alerts on Monday: Always follow normal time-based rules
         else if (fieldType === 'cp_alerts') {
@@ -6138,34 +5960,6 @@ function showLoading() {
 function hideLoading() {
     applyFiltersBtn.innerHTML = 'Apply Filters';
     applyFiltersBtn.disabled = false;
-}
-
-// Weekend warning functions
-function setupWeekendWarning() {
-    const dateInput = document.getElementById('entry-date');
-    if (dateInput) {
-        dateInput.addEventListener('change', function() {
-            const selectedDate = this.value;
-            if (selectedDate && isWeekend(selectedDate)) {
-                showWeekendWarning();
-            } else {
-                hideWeekendWarning();
-            }
-        });
-    }
-    
-    // Also check XVA date input
-    const xvaDateInput = document.getElementById('xva-entry-date');
-    if (xvaDateInput) {
-        xvaDateInput.addEventListener('change', function() {
-            const selectedDate = this.value;
-            if (selectedDate && isWeekend(selectedDate)) {
-                showWeekendWarning();
-            } else {
-                hideWeekendWarning();
-            }
-        });
-    }
 }
 
 // Time formatting functions
@@ -6610,8 +6404,8 @@ function updateTableRows() {
     
     // Recreate rows with new column order
     existingRows.forEach(row => {
-        if (row.classList.contains('week-header')) {
-            // Handle week header rows
+        if (row.classList.contains('month-header')) {
+            // Handle month header rows
             tbody.appendChild(row);
         } else {
             // Handle data rows - need to extract data and recreate with new order
@@ -7140,15 +6934,15 @@ function performSearch() {
     const tableRows = document.querySelectorAll('#entries-table tbody tr');
     let visibleRowCount = 0;
     
-    // Hide all week headers during search using CSS class
-    const weekHeaders = document.querySelectorAll('#entries-table tbody tr.week-header');
-    weekHeaders.forEach(header => {
+    // Hide all month headers during search using CSS class
+    const monthHeaders = document.querySelectorAll('#entries-table tbody tr.month-header');
+    monthHeaders.forEach(header => {
         header.classList.add('search-hidden');
     });
     
     tableRows.forEach(row => {
-        // Skip week header rows - they're already hidden
-        if (row.classList.contains('week-header')) {
+        // Skip month header rows - they're already hidden
+        if (row.classList.contains('month-header')) {
             return;
         }
         
@@ -7198,7 +6992,7 @@ function performSearch() {
         }
     });
     
-    console.log('🔍 Search complete. Visible rows:', visibleRowCount, '(Week headers hidden during search)');
+    console.log('🔍 Search complete. Visible rows:', visibleRowCount, '(Month headers hidden during search)');
 }
 
 function showAllRows() {
@@ -7207,8 +7001,8 @@ function showAllRows() {
     const tableRows = document.querySelectorAll('#entries-table tbody tr');
     
     tableRows.forEach(row => {
-        // Handle week header rows - show them all and remove search-hidden class
-        if (row.classList.contains('week-header')) {
+        // Handle month header rows - show them all and remove search-hidden class
+        if (row.classList.contains('month-header')) {
             row.style.display = '';
             row.classList.remove('search-hidden');
             return;
@@ -7230,15 +7024,15 @@ function showAllRows() {
     });
 }
 
-function updateWeekHeadersVisibility() {
-    const weekHeaders = document.querySelectorAll('#entries-table tbody tr.week-header');
+function updateMonthHeadersVisibility() {
+    const monthHeaders = document.querySelectorAll('#entries-table tbody tr.month-header');
     
-    weekHeaders.forEach(header => {
-        // Find the next sibling rows until we hit another week header
+    monthHeaders.forEach(header => {
+        // Find the next sibling rows until we hit another month header
         let hasVisibleEntries = false;
         let nextSibling = header.nextElementSibling;
         
-        while (nextSibling && !nextSibling.classList.contains('week-header')) {
+        while (nextSibling && !nextSibling.classList.contains('month-header')) {
             if (nextSibling.style.display !== 'none') {
                 hasVisibleEntries = true;
                 break;
@@ -7246,7 +7040,7 @@ function updateWeekHeadersVisibility() {
             nextSibling = nextSibling.nextElementSibling;
         }
         
-        // Show/hide week header based on whether it has visible entries
+        // Show/hide month header based on whether it has visible entries
         header.style.display = hasVisibleEntries ? '' : 'none';
     });
 }
