@@ -405,6 +405,72 @@ class IndependentRowSQLiteAdapter:
         
         conn.close()
         return result_entries
+
+    def get_individual_rows_by_application(self, application_name: str, start_date: str = None, end_date: str = None, 
+                                         row_type_filter: str = None) -> List[Dict]:
+        """
+        Get individual rows without grouping for row-level filtering
+        Used when filters need to work at individual row level (e.g., PRB only, HIIM only)
+        """
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        # Build query
+        query = "SELECT * FROM entries WHERE application_name = ?"
+        params = [application_name]
+        
+        if start_date:
+            query += " AND date >= ?"
+            params.append(start_date)
+        
+        if end_date:
+            query += " AND date <= ?"
+            params.append(end_date)
+        
+        # Add row type filter if specified (e.g., only PRB rows, only HIIM rows)
+        if row_type_filter:
+            if row_type_filter == 'prb':
+                query += " AND (row_type = 'prb' OR (row_type = 'main' AND prb_id_number IS NOT NULL AND prb_id_number != ''))"
+            elif row_type_filter == 'hiim':
+                query += " AND (row_type = 'hiim' OR (row_type = 'main' AND hiim_id_number IS NOT NULL AND hiim_id_number != ''))"
+            elif row_type_filter == 'issue':
+                query += " AND (row_type = 'issue' OR (row_type = 'main' AND issue_description IS NOT NULL AND issue_description != ''))"
+        
+        query += " ORDER BY date DESC, grouping_key, row_position"
+        
+        cursor.execute(query, params)
+        columns = [description[0] for description in cursor.description]
+        all_rows = [dict(zip(columns, row)) for row in cursor.fetchall()]
+        
+        # Convert rows to API-compatible format with individual row data
+        result_entries = []
+        for row in all_rows:
+            # Create a formatted entry for each individual row
+            formatted_row = row.copy()
+            
+            # Add compatibility fields for frontend
+            if row['row_type'] == 'prb':
+                formatted_row['prbs'] = [{'prb_id_number': row['prb_id_number'], 'prb_id_status': row['prb_id_status'], 'prb_link': row['prb_link']}]
+                formatted_row['hiims'] = []
+                formatted_row['issues'] = []
+            elif row['row_type'] == 'hiim':
+                formatted_row['prbs'] = []
+                formatted_row['hiims'] = [{'hiim_id_number': row['hiim_id_number'], 'hiim_id_status': row['hiim_id_status'], 'hiim_link': row['hiim_link']}]
+                formatted_row['issues'] = []
+            elif row['row_type'] == 'issue':
+                formatted_row['prbs'] = []
+                formatted_row['hiims'] = []
+                formatted_row['issues'] = [{'description': row['issue_description']}]
+            elif row['row_type'] == 'main':
+                # For main rows, include individual fields as arrays if they exist
+                formatted_row['prbs'] = [{'prb_id_number': row['prb_id_number'], 'prb_id_status': row['prb_id_status'], 'prb_link': row['prb_link']}] if row.get('prb_id_number') else []
+                formatted_row['hiims'] = [{'hiim_id_number': row['hiim_id_number'], 'hiim_id_status': row['hiim_id_status'], 'hiim_link': row['hiim_link']}] if row.get('hiim_id_number') else []
+                formatted_row['issues'] = [{'description': row['issue_description']}] if row.get('issue_description') else []
+            
+            result_entries.append(formatted_row)
+        
+        conn.close()
+        return result_entries
     
     def update_entry(self, entry_id: int, entry_data: Dict, application_name: str = None) -> Optional[Dict]:
         """
@@ -867,6 +933,22 @@ class EntryManager:
         if not adapter:
             return []
         return adapter.get_entries_by_application(application_name, start_date, end_date)
+
+    def get_individual_rows_by_application(self, application_name: str, start_date: str = None, end_date: str = None, 
+                                         row_type_filter: str = None) -> List[Dict]:
+        """Get individual rows without grouping for row-level filtering"""
+        adapter = self.adapters.get(application_name.upper())
+        if not adapter:
+            return []
+        return adapter.get_individual_rows_by_application(application_name, start_date, end_date, row_type_filter)
+
+    def get_all_individual_rows(self, row_type_filter: str = None) -> List[Dict]:
+        """Get all individual rows from all databases without grouping"""
+        all_rows = []
+        for app_name, adapter in self.adapters.items():
+            rows = adapter.get_individual_rows_by_application(app_name, None, None, row_type_filter)
+            all_rows.extend(rows)
+        return all_rows
     
     def get_entry_by_id(self, entry_id: int, application_name: str = None) -> Optional[Dict]:
         """Get a specific entry by ID"""

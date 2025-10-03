@@ -1469,6 +1469,44 @@ function displayEntries(entries) {
         entriesTbody.innerHTML = `<tr><td colspan="${colspan}" class="text-center">No entries found</td></tr>`;
         return;
     }
+
+    // Detect if we're in row-level filtering mode (PRB Only or HIIM Only)
+    const isRowLevelFiltering = filters.prbOnly.checked || filters.hiimOnly.checked;
+    
+    if (isRowLevelFiltering) {
+        // Row-level filtering: Display each entry as an individual row without grouping/expansion
+        displayIndividualRows(entries);
+    } else {
+        // Normal display: Group entries by week and expand multi-item entries
+        displayGroupedEntries(entries);
+    }
+    
+    // Apply column visibility based on current application
+    toggleColumnsForApplication(filters.application);
+    
+    // Authentication state is now handled by CSS classes
+}
+
+function displayIndividualRows(entries) {
+    /**
+     * Display individual rows for row-level filtering (PRB Only, HIIM Only)
+     * Each entry is treated as a separate row without grouping or expansion
+     */
+    
+    // Sort entries by date descending
+    const sortedEntries = [...entries].sort((a, b) => new Date(b.date) - new Date(a.date));
+    
+    sortedEntries.forEach(entry => {
+        // Create a single row for each individual entry
+        const row = createSingleEntryRow(entry);
+        entriesTbody.appendChild(row);
+    });
+}
+
+function displayGroupedEntries(entries) {
+    /**
+     * Normal display logic: Group entries by week and expand multi-item entries
+     */
     
     // Group entries by week
     const weeklyGroups = {};
@@ -1559,6 +1597,7 @@ function displayEntries(entries) {
             </td>
         `;
         entriesTbody.appendChild(weekHeaderRow);
+        
         // Add entries for this week, expanding multiple items per date into separate rows
         weekEntries.forEach(entry => {
             const expandedRows = createExpandedEntryRows(entry);
@@ -1567,13 +1606,42 @@ function displayEntries(entries) {
             });
         });
     });
-    
+}
 
+function createSingleEntryRow(entry) {
+    /**
+     * Create a single row for an individual entry (used in row-level filtering)
+     * No expansion or grouping - just display the entry as-is
+     */
     
-    // Apply column visibility based on current application
-    toggleColumnsForApplication(filters.application);
+    const entryId = `entry-${entry.id}`;
     
-    // Authentication state is now handled by CSS classes
+    // Determine the item type based on the entry's row_type and content
+    let itemType = 'main';
+    if (entry.row_type) {
+        itemType = entry.row_type;
+    } else {
+        // Legacy detection for entries without explicit row_type
+        if (entry.prb_id_number && !entry.hiim_id_number && !entry.issue_description) {
+            itemType = 'prb';
+        } else if (entry.hiim_id_number && !entry.prb_id_number && !entry.issue_description) {
+            itemType = 'hiim';
+        } else if (entry.issue_description && !entry.prb_id_number && !entry.hiim_id_number) {
+            itemType = 'issue';
+        }
+    }
+    
+    // Use the existing createEntryRow function
+    // Parameters: (entry, isFirstRow, itemType, entryId, childCount)
+    const row = createEntryRow(entry, true, itemType, entryId, 0);
+    
+    // Add specific styling for individual row display
+    row.classList.add('individual-row');
+    if (entry.row_type) {
+        row.classList.add(`row-type-${entry.row_type}`);
+    }
+    
+    return row;
 }
 
 function createExpandedEntryRows(entry) {

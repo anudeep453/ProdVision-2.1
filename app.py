@@ -360,19 +360,38 @@ def get_entries():
         prb_only = request.args.get('prb_only', 'false').lower() == 'true'
         hiim_only = request.args.get('hiim_only', 'false').lower() == 'true'
         
-        # Get entries - either from specific application database or all databases
-        if application:
-            # Get entries from specific application database with date filtering
-            all_entries = entry_manager.get_entries_by_application(application, start_date, end_date)
+        # Determine if we need row-level filtering
+        use_row_level_filtering = prb_only or hiim_only
+        row_type_filter = None
+        
+        if use_row_level_filtering:
+            if prb_only:
+                row_type_filter = 'prb'
+            elif hiim_only:
+                row_type_filter = 'hiim'
+        
+        # Get entries - use row-level filtering if needed
+        if use_row_level_filtering:
+            if application:
+                # Get individual rows from specific application database with row-type filtering
+                all_entries = entry_manager.get_individual_rows_by_application(application, start_date, end_date, row_type_filter)
+            else:
+                # Get all individual rows from all databases with row-type filtering
+                all_entries = entry_manager.get_all_individual_rows(row_type_filter)
         else:
-            # Get all entries from all databases
-            all_entries = entry_manager.get_all_entries()
+            # Use normal grouped entry retrieval for other filters
+            if application:
+                # Get entries from specific application database with date filtering
+                all_entries = entry_manager.get_entries_by_application(application, start_date, end_date)
+            else:
+                # Get all entries from all databases
+                all_entries = entry_manager.get_all_entries()
         
         # Apply remaining filters (non-date, non-application filters)
         filtered_entries = []
         for entry in all_entries:
             # Date filters (only needed if not already filtered at database level)
-            if not application:  # Only apply date filters if we got all entries
+            if not application and not use_row_level_filtering:  # Only apply date filters if we got all entries and not using row-level filtering
                 if start_date:
                     entry_date = convert_date_string(entry.get('date', ''))
                     if entry_date < datetime.strptime(start_date, '%Y-%m-%d').date():
@@ -393,17 +412,19 @@ def get_entries():
                 if entry.get('quality_status') != quality_status:
                     continue
             
-            # PRB only filter
-            if prb_only:
-                # Accept legacy single field or new prbs array
-                if not entry.get('prb_id_number') and not (isinstance(entry.get('prbs'), list) and len(entry.get('prbs')) > 0):
-                    continue
-            
-            # HIIM only filter
-            if hiim_only:
-                # Accept legacy single field or new hiims array
-                if not entry.get('hiim_id_number') and not (isinstance(entry.get('hiims'), list) and len(entry.get('hiims')) > 0):
-                    continue
+            # Skip PRB/HIIM filters since they're already handled at database level for row-level filtering
+            if not use_row_level_filtering:
+                # PRB only filter (only apply if not using row-level filtering)
+                if prb_only:
+                    # Accept legacy single field or new prbs array
+                    if not entry.get('prb_id_number') and not (isinstance(entry.get('prbs'), list) and len(entry.get('prbs')) > 0):
+                        continue
+                
+                # HIIM only filter (only apply if not using row-level filtering)
+                if hiim_only:
+                    # Accept legacy single field or new hiims array
+                    if not entry.get('hiim_id_number') and not (isinstance(entry.get('hiims'), list) and len(entry.get('hiims')) > 0):
+                        continue
             
             filtered_entries.append(entry)
         
