@@ -312,6 +312,8 @@ class IndependentRowSQLiteAdapter:
                     'row_type': 'issue',
                     'row_position': item_set_position,  # This represents Item Set number (0, 1, 2, etc.)
                     'issue_description': issue.get('description', ''),
+                    # Allow per-item time loss so each issue row can have its own value (fallback to common if not provided)
+                    'time_loss': issue.get('time_loss', common_data.get('time_loss', '')),
                     # Clear other type-specific fields for independence
                     'prb_id_number': '',
                     'prb_id_status': '',
@@ -331,7 +333,7 @@ class IndependentRowSQLiteAdapter:
             result = created_entries[0].copy()  # Main entry
             result['prbs'] = [e for e in created_entries if e['row_type'] == 'prb']
             result['hiims'] = [e for e in created_entries if e['row_type'] == 'hiim']
-            result['issues'] = [{'description': e['issue_description']} for e in created_entries if e['row_type'] == 'issue']
+            result['issues'] = [{'description': e['issue_description'], 'time_loss': e.get('time_loss', ''), 'row_position': e.get('row_position', 0)} for e in created_entries if e['row_type'] == 'issue']
             
             return result
             
@@ -397,7 +399,7 @@ class IndependentRowSQLiteAdapter:
             elif row['row_type'] == 'hiim':
                 grouped_entries[grouping_key]['hiims'].append(row)
             elif row['row_type'] == 'issue':
-                grouped_entries[grouping_key]['issues'].append({'description': row['issue_description']})
+                grouped_entries[grouping_key]['issues'].append({'description': row['issue_description'], 'time_loss': row.get('time_loss', ''), 'row_position': row.get('row_position', 0)})
         
         # Convert back to API-compatible format
         result_entries = []
@@ -468,12 +470,12 @@ class IndependentRowSQLiteAdapter:
             elif row['row_type'] == 'issue':
                 formatted_row['prbs'] = []
                 formatted_row['hiims'] = []
-                formatted_row['issues'] = [{'description': row['issue_description']}]
+                formatted_row['issues'] = [{'description': row['issue_description'], 'time_loss': row.get('time_loss', ''), 'row_position': row.get('row_position', 0)}]
             elif row['row_type'] == 'main':
                 # For main rows, include individual fields as arrays if they exist
                 formatted_row['prbs'] = [{'prb_id_number': row['prb_id_number'], 'prb_id_status': row['prb_id_status'], 'prb_link': row['prb_link']}] if row.get('prb_id_number') else []
                 formatted_row['hiims'] = [{'hiim_id_number': row['hiim_id_number'], 'hiim_id_status': row['hiim_id_status'], 'hiim_link': row['hiim_link']}] if row.get('hiim_id_number') else []
-                formatted_row['issues'] = [{'description': row['issue_description']}] if row.get('issue_description') else []
+                formatted_row['issues'] = [{'description': row['issue_description'], 'time_loss': row.get('time_loss', ''), 'row_position': row.get('row_position', 0)}] if row.get('issue_description') else []
             
             result_entries.append(formatted_row)
         
@@ -622,7 +624,8 @@ class IndependentRowSQLiteAdapter:
             }
         elif row_type == 'issue':
             fields_map = {
-                'issue_description': item_data.get('description', item_data.get('issue_description'))
+                'issue_description': item_data.get('description', item_data.get('issue_description')),
+                'time_loss': item_data.get('time_loss', item_data.get('time_loss'))
             }
         
         for field, value in fields_map.items():
@@ -696,7 +699,8 @@ class IndependentRowSQLiteAdapter:
             })
         elif row_type == 'issue':
             new_row_data.update({
-                'issue_description': item_data.get('description', item_data.get('issue_description'))
+                'issue_description': item_data.get('description', item_data.get('issue_description')),
+                'time_loss': item_data.get('time_loss', '')
             })
         
         # Insert the new row
@@ -774,7 +778,7 @@ class IndependentRowSQLiteAdapter:
             elif row['row_type'] == 'hiim':
                 grouped_entries[grouping_key]['hiims'].append(row)
             elif row['row_type'] == 'issue':
-                grouped_entries[grouping_key]['issues'].append({'description': row['issue_description']})
+                grouped_entries[grouping_key]['issues'].append({'description': row['issue_description'], 'time_loss': row.get('time_loss', ''), 'row_position': row.get('row_position', 0)})
         
         # Convert to API format
         result_entries = []
@@ -861,6 +865,7 @@ class IndependentRowSQLiteAdapter:
                         issue_dict[position] = {
                             'id': row['id'],
                             'description': row['issue_description'],
+                            'time_loss': row.get('time_loss', ''),
                             'row_position': position,  # Include position for frontend
                             'created_at': row['created_at']
                         }

@@ -3863,6 +3863,11 @@ tr.month-header:nth-child(odd) {
     color: transparent !important; /* Hide any text that might appear */
 }
 
+/* Exception: Show time_loss content in sub-rows */
+.sub-row td[data-column="time_loss"] {
+    color: #2d3748 !important; /* Make time_loss text visible */
+}
+
 .sub-row td.date-cell::before,
 .sub-row td.day-column::before,
 .sub-row td.common-field::before {
@@ -3924,6 +3929,11 @@ tr:not(.sub-row) + .sub-row td {
 .sub-row:hover td.day-column,
 .sub-row:hover td.common-field {
     background-color: #f1f5f9 !important;
+}
+
+/* Exception: Show time_loss content in sub-rows on hover */
+.sub-row:hover td[data-column="time_loss"] {
+    color: #2d3748 !important; /* Keep time_loss text visible on hover */
 }
 
 /* Day column styling */

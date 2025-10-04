@@ -1,4 +1,12 @@
 // Global variables
+// ---------------------------------------------------------------------------
+// ProdVision Dashboard Script Version Marker (increment when deploying JS changes)
+// If you suspect stale cache, bump VERSION and reload with hard refresh.
+// ---------------------------------------------------------------------------
+const PRODVISION_JS_VERSION = '2025-10-04.3';
+if (window && window.console) {
+    console.log('%cProdVision JS Loaded','background:#222;color:#bada55;padding:2px 6px;border-radius:4px', PRODVISION_JS_VERSION);
+}
 let isAuthenticated = false;
 let currentEntryId = null;
 let charts = {};
@@ -1524,6 +1532,9 @@ function displayIndividualRows(entries) {
         const row = createSingleEntryRow(entry);
         entriesTbody.appendChild(row);
     });
+
+    // Post-render audit for time loss cells (individual rows mode)
+    scheduleTimeLossAudit();
 }
 
 function displayGroupedEntries(entries) {
@@ -1594,6 +1605,9 @@ function displayGroupedEntries(entries) {
             });
         });
     });
+
+    // Post-render audit for time loss cells (grouped mode)
+    scheduleTimeLossAudit();
 }
 
 function createSingleEntryRow(entry) {
@@ -1645,32 +1659,27 @@ function createExpandedEntryRows(entry) {
     
     // Add issues with their positions
     const issues = entry.issues || [];
-    issues.forEach(issue => {
-        allItems.push({
-            type: 'issue',
-            position: issue.row_position || 0,
-            data: issue
-        });
+    issues.forEach((issue, idx) => {
+        if (!issue) return;
+        // Use stored row_position, fallback to index to avoid collapsing multiple issues into position 0
+        const pos = (issue.row_position !== undefined && issue.row_position !== null) ? issue.row_position : idx;
+        allItems.push({ type: 'issue', position: pos, data: issue });
     });
     
     // Add PRBs with their positions
     const prbs = entry.prbs || [];
-    prbs.forEach(prb => {
-        allItems.push({
-            type: 'prb', 
-            position: prb.row_position || 0,
-            data: prb
-        });
+    prbs.forEach((prb, idx) => {
+        if (!prb) return;
+        const pos = (prb.row_position !== undefined && prb.row_position !== null) ? prb.row_position : idx;
+        allItems.push({ type: 'prb', position: pos, data: prb });
     });
     
     // Add HIIMs with their positions
     const hiims = entry.hiims || [];
-    hiims.forEach(hiim => {
-        allItems.push({
-            type: 'hiim',
-            position: hiim.row_position || 0,
-            data: hiim
-        });
+    hiims.forEach((hiim, idx) => {
+        if (!hiim) return;
+        const pos = (hiim.row_position !== undefined && hiim.row_position !== null) ? hiim.row_position : idx;
+        allItems.push({ type: 'hiim', position: pos, data: hiim });
     });
     
     // Handle legacy single-value entries (for backward compatibility)
@@ -1706,6 +1715,31 @@ function createExpandedEntryRows(entry) {
         });
     }
     
+    // Pre-compute a time loss map by position from issues (preferred source)
+    const timeLossByPosition = {};
+    issues.forEach((issue, idx) => {
+        if (!issue) return;
+        const tl = issue.time_loss || issue.timeLoss;
+        if (!tl) return;
+        // Fix: properly check if row_position is defined (including 0)
+        const pos = (issue.row_position !== undefined && issue.row_position !== null) ? issue.row_position : idx;
+        timeLossByPosition[pos] = tl;
+        if (window && window.console) {
+            console.log('[TimeLossMap] Mapping issue', {
+                idx,
+                issue,
+                timeLoss: tl,
+                rowPosition: issue.row_position,
+                mappedPosition: pos,
+                timeLossByPosition: {...timeLossByPosition}
+            });
+        }
+    });
+    // Fallback to legacy top-level field if no per-item time loss found
+    if (!Object.keys(timeLossByPosition).length && entry.time_loss) {
+        timeLossByPosition[0] = entry.time_loss;
+    }
+
     // Group items by row_position to create Item Sets
     const positionGroups = {};
     allItems.forEach(item => {
@@ -1734,6 +1768,19 @@ function createExpandedEntryRows(entry) {
         const itemSet = positionGroups[position];
         
         // Build per-row entry with only the items for this position
+        const derivedTimeLoss = (itemSet.issue && itemSet.issue.time_loss)
+            ? itemSet.issue.time_loss
+            : (timeLossByPosition[position] || '');
+        if (window && window.console) {
+            console.log('[TimeLossMap] Building row', {
+                entryId: entry.id,
+                position,
+                isFirst,
+                derivedTimeLoss,
+                timeLossByPosition: {...timeLossByPosition},
+                issuePositions: issues.map(i => i && (i.row_position !== undefined && i.row_position !== null ? i.row_position : 'idx-fallback'))
+            });
+        }
         const itemEntry = {
             ...entry,
             issue_description: itemSet.issue ? itemSet.issue.description : '',
@@ -1745,8 +1792,14 @@ function createExpandedEntryRows(entry) {
             prb_link: itemSet.prb ? (itemSet.prb.prb_link || '') : '',
             hiim_id_number: itemSet.hiim ? (itemSet.hiim.hiim_id_number || itemSet.hiim.hiim_id || '') : '',
             hiim_id_status: itemSet.hiim ? (itemSet.hiim.hiim_id_status || 'default') : '',
-            hiim_link: itemSet.hiim ? (itemSet.hiim.hiim_link || '') : ''
+            hiim_link: itemSet.hiim ? (itemSet.hiim.hiim_link || '') : '',
+            time_loss: derivedTimeLoss
         };
+        itemEntry.__has_time_loss = !!itemEntry.time_loss;
+        if (isFirst) {
+            const anyTl = Object.values(timeLossByPosition).some(v => v && String(v).trim());
+            itemEntry.__any_time_loss = anyTl;
+        }
         
         // Determine row type based on what's present in this Item Set
         let rowType = 'issue';
@@ -1763,6 +1816,43 @@ function createExpandedEntryRows(entry) {
     });
 
     return rows;
+}
+
+// Schedule a time loss audit after the current rendering cycle
+function scheduleTimeLossAudit() {
+    if (typeof requestAnimationFrame === 'function') {
+        requestAnimationFrame(() => setTimeout(auditTimeLossCells, 0));
+    } else {
+        setTimeout(auditTimeLossCells, 0);
+    }
+}
+
+// Audit function to verify that any row with a computed time_loss actually renders it in the corresponding cell
+function auditTimeLossCells() {
+    try {
+        const anomalies = [];
+        const rows = entriesTbody.querySelectorAll('tr');
+        rows.forEach(r => {
+            const tlAttr = r.getAttribute('data-time-loss');
+            if (tlAttr && tlAttr.trim()) {
+                const tlCell = r.querySelector('td[data-column="time_loss"]');
+                if (!tlCell) return;
+                const text = tlCell.textContent.trim();
+                // Allow 'N/A' for first rows when __any_time_loss is false; otherwise ensure value present
+                const anyFlag = r.getAttribute('data-any-time-loss');
+                if (!text && !(text === 'N/A' && anyFlag === 'false')) {
+                    anomalies.push({ rowId: r.id, expected: tlAttr, found: text || '(empty)' });
+                }
+            }
+        });
+        if (anomalies.length) {
+            console.warn('[TimeLossAudit] Detected rendering anomalies', anomalies);
+        } else {
+            console.log('[TimeLossAudit] All time_loss cells rendered as expected');
+        }
+    } catch (e) {
+        console.warn('[TimeLossAudit] Audit failed', e);
+    }
 }
 
 // Developer diagnostic helper (non-production impact): run in console to verify mapping
@@ -2137,7 +2227,7 @@ function createEntryRow(entry, isFirstRow, itemType, entryId, childCount) {
         cp_alerts: { html: cpAlertsDisplay, cls: 'common-field' },
     quality_status: { html: qualityDisplay, cls: 'common-field' },
         issue_description: { html: issuesDisplay, cls: 'item-field' },
-        time_loss: { html: isFirstRow ? (entry.time_loss ? escapeHtml(entry.time_loss) : 'N/A') : '', cls: 'common-field' },
+    time_loss: { html: (entry.time_loss ? escapeHtml(entry.time_loss) : (isFirstRow && !entry.__any_time_loss ? 'N/A' : '')) , cls: 'common-field' },
         prb_id: { html: prbDisplay, cls: 'item-field' },
         hiim_id: { html: hiimDisplay, cls: 'item-field' },
         remarks: { html: remarksDisplay, cls: 'common-field' },
@@ -2186,6 +2276,20 @@ function createEntryRow(entry, isFirstRow, itemType, entryId, childCount) {
         return `<td class="${c.cls}" data-column="${col}"${style}>${shouldShow ? (c.html || '') : ''}</td>`;
     }).join('');
     row.innerHTML = cellsHtml;
+    if (window && window.console) {
+        try {
+            const tlCellValue = entry.time_loss || (isFirstRow && !entry.__any_time_loss ? 'N/A' : '');
+            console.log('[TimeLossRender]', { entryId, isFirstRow, itemType, time_loss: entry.time_loss, rendered: tlCellValue });
+        } catch(e) {}
+    }
+
+    // Attach data attributes for audit purposes
+    if (entry.time_loss) {
+        row.setAttribute('data-time-loss', entry.time_loss);
+    }
+    if (isFirstRow && entry.__any_time_loss !== undefined) {
+        row.setAttribute('data-any-time-loss', String(entry.__any_time_loss));
+    }
     
     // Add click handlers for clickable IDs
     setTimeout(() => {
@@ -3407,7 +3511,8 @@ function populateCombinedFromEntry(entry, isXva) {
             const issueDescription = issue.description || issue;
             const relatedPrb = index < prbs.length ? prbs[index] : null;
             const relatedHiim = index < hiims.length ? hiims[index] : null;
-            const cardTimeLoss = index === 0 ? timeLoss : '';
+            // Prefer per-issue time loss if provided, else fallback to top-level for first card
+            const cardTimeLoss = issue.time_loss ? issue.time_loss : (index === 0 ? timeLoss : '');
             
             addCombinedItemCard(isXva, { 
                 issue: issueDescription, 
@@ -3898,26 +4003,27 @@ function serializeIssues() {
 }
 
 function serializeIssuesFor(isXva = false) {
-    // First check for combined cards
+    // Collect issues with optional per-item time loss values
     const combinedContainerId = isXva ? 'xva-combined-items-container' : 'combined-items-container';
     const combinedContainer = document.getElementById(combinedContainerId);
     const issues = [];
-    
     if (combinedContainer) {
         const cards = combinedContainer.querySelectorAll('.combined-item-card');
-        cards.forEach((card, index) => {
+        cards.forEach(card => {
             const textarea = card.querySelector('.issue-description');
+            const timeLossInput = card.querySelector('.time-loss');
             if (textarea && textarea.value.trim()) {
-                // Item Set has issue data
-                issues.push({ description: textarea.value.trim() });
+                const issueObj = { description: textarea.value.trim() };
+                if (timeLossInput && timeLossInput.value.trim()) {
+                    issueObj.time_loss = timeLossInput.value.trim();
+                }
+                issues.push(issueObj);
             } else {
-                // Item Set has no issue - add null placeholder to maintain position alignment
-                issues.push(null);
+                issues.push(null); // Maintain positional alignment
             }
         });
     }
-    
-    // Fallback to old individual containers if they exist
+    // Fallback legacy containers
     const containerId = isXva ? 'xva-issues-container' : 'issues-container';
     const container = document.getElementById(containerId);
     if (container) {
@@ -3929,28 +4035,22 @@ function serializeIssuesFor(isXva = false) {
             }
         });
     }
-    
     return issues;
 }
 
 function serializeTimeLossFor(isXva = false) {
-    // First check for combined cards
+    // Return array of time loss values aligned to item sets (used for backward compatibility if needed)
     const combinedContainerId = isXva ? 'xva-combined-items-container' : 'combined-items-container';
     const combinedContainer = document.getElementById(combinedContainerId);
-    const timeLossData = [];
-    
+    const values = [];
     if (combinedContainer) {
         const cards = combinedContainer.querySelectorAll('.combined-item-card');
         cards.forEach(card => {
             const input = card.querySelector('.time-loss');
-            if (input && input.value.trim()) {
-                timeLossData.push(input.value.trim());
-            }
+            values.push(input && input.value.trim() ? input.value.trim() : null);
         });
     }
-    
-    // Return a single string if there's data, empty string if not
-    return timeLossData.length > 0 ? timeLossData.join('; ') : '';
+    return values;
 }
 
 function serializePrbs(isXva = false) {
@@ -4165,7 +4265,8 @@ async function handleCVAREntrySubmit(event) {
         hiim_id_status: formData.get('hiim_id_status'),
         hiim_link: formData.get('hiim_link'),
         remarks: formData.get('remarks'),
-        time_loss: serializeTimeLossFor(false),
+    // Legacy top-level time_loss retained for backward compatibility (first non-null from item sets)
+    time_loss: '',
         // Infrastructure weekend manual flag (null = auto-detect, 0 = manually unchecked, 1 = manually checked)
         infra_weekend_manual: (() => {
             const checkbox = document.getElementById('entry-infra-weekend');
@@ -4201,6 +4302,9 @@ async function handleCVAREntrySubmit(event) {
         entryData.issues = issuesArray;
         // Clear legacy single field to avoid duplication on server if you prefer; otherwise server migrates first item.
         entryData.issue_description = '';
+        // Derive top-level time_loss from first issue that has one
+        const firstWithTimeLoss = issuesArray.find(i => i && i.time_loss);
+        if (firstWithTimeLoss) entryData.time_loss = firstWithTimeLoss.time_loss;
     }
 
     const prbsArray = serializePrbs(false);
@@ -4347,6 +4451,8 @@ async function handleXVAEntrySubmit(event) {
     if (xvaIssues.length) {
         entryData.issues = xvaIssues;
         entryData.issue_description = '';
+        const firstWithTimeLoss = xvaIssues.find(i => i && i.time_loss);
+        if (firstWithTimeLoss) entryData.time_loss = firstWithTimeLoss.time_loss;
     }
     
     console.log('📝 Constructed XVA entry data:', entryData);
