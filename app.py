@@ -25,7 +25,7 @@ from openpyxl.styles import Font, Alignment, PatternFill
 import io
 # Import new independent row adapter
 from independent_row_adapter import EntryManager as ProductionEntryManager
-from config import SECRET_KEY, DEBUG, HOST, PORT, SHAREPOINT_URL
+from config import SECRET_KEY, DEBUG, HOST, PORT
 
 app = Flask(__name__)
 
