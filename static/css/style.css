@@ -3,6 +3,7 @@
     margin: 0;
     padding: 0;
     box-sizing: border-box;
+}
 
 body {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
@@ -1605,7 +1606,6 @@ body {
     flex-direction: column;
 }
 
-/* Removed the top gradient line */
 
 /* Custom scrollbar for modal content */
 .modal-content::-webkit-scrollbar {
@@ -1665,7 +1665,6 @@ body {
     -webkit-overflow-scrolling: touch;
 }
 
-/* Removed scroll indicator gradient */
 
 @keyframes fadeIn {
     from { opacity: 0; }
@@ -1769,7 +1768,6 @@ body {
     position: relative;
 }
 
-/* Removed the decorative gradient line at the top */
 
 .auth-modal-header {
     padding: 32px 32px 24px;
@@ -1873,7 +1871,6 @@ body {
     transform: translateY(-1px);
 }
 
-/* Removed the decorative gradient line under input focus */
 
 .auth-submit-btn {
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -2272,7 +2269,6 @@ body {
     z-index: 10;
 }
 
-/* Removed the decorative line below header */
 
 .modal-header h3 {
     color: #1f2937;
@@ -2433,7 +2429,6 @@ body {
     box-sizing: border-box;
 }
 
-/* Removed the decorative line above form actions */
 
 .section-title {
     color: #667eea;
@@ -3164,17 +3159,8 @@ body {
     min-width: 60px;
     text-align: center;
 }
-    
-    
-    .data-table {
-        font-size: 14px;
-    }
-    
-    .data-table th,
-    .data-table td {
-        padding: 8px;
-    }
-}
+
+/* (Removed malformed closing brace and extra indentation that caused parse error) */
 
 /* Loading Animation */
 .loading {
@@ -3674,20 +3660,6 @@ body.edit-mode .add-entry-btn {
     outline-offset: 2px;
 }
 
-/* Ensure Actions column is hidden by default when not authenticated */
-.edit-column {
-    display: none !important;
-}
-
-/* Show Actions column only when authenticated */
-body.edit-mode .edit-column {
-    display: flex !important;
-    gap: 8px !important;
-    justify-content: center !important;
-    align-items: center !important;
-    flex-wrap: nowrap !important;
-    flex-direction: row !important;
-}
 
 
 @keyframes slideInDown {

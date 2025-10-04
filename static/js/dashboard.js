@@ -3,10 +3,19 @@
 // ProdVision Dashboard Script Version Marker (increment when deploying JS changes)
 // If you suspect stale cache, bump VERSION and reload with hard refresh.
 // ---------------------------------------------------------------------------
-const PRODVISION_JS_VERSION = '2025-10-04.3';
-if (window && window.console) {
-    console.log('%cProdVision JS Loaded','background:#222;color:#bada55;padding:2px 6px;border-radius:4px', PRODVISION_JS_VERSION);
-}
+const PRODVISION_JS_VERSION = '2025-10-04.4';
+// Debug logging disabled in production cleanup. Set to true locally if needed.
+const PRODVISION_DEBUG = false;
+// Silence non-error console methods (log, warn, table, info, debug) while preserving errors
+try {
+    if (!PRODVISION_DEBUG && typeof window !== 'undefined' && window.console) {
+        ['log','warn','table','info','debug'].forEach(fn => {
+            if (typeof window.console[fn] === 'function') {
+                window.console[fn] = function() { /* debug output removed */ };
+            }
+        });
+    }
+} catch(e) { /* ignore */ }
 let isAuthenticated = false;
 let currentEntryId = null;
 let charts = {};
@@ -1501,15 +1510,20 @@ function displayEntries(entries) {
         return;
     }
 
-    // Detect if we're in row-level filtering mode (PRB Only, HIIM Only, or Time Loss Only)
-    const isRowLevelFiltering = filters.prbOnly.checked || filters.hiimOnly.checked || filters.timeLossOnly.checked;
+    // Detect if we're in row-level filtering mode (exactly one of PRB Only, HIIM Only, Time Loss Only)
+    const activeRowFilters = [filters.prbOnly.checked, filters.hiimOnly.checked, filters.timeLossOnly.checked].filter(Boolean).length;
+    const isRowLevelFiltering = activeRowFilters === 1; // single active filter => row-level (backend already returns flattened rows)
+    const forceExpandedMultiFilter = activeRowFilters > 1; // multi-filter AND mode: show all item-set rows (no hidden child rows)
     
     if (isRowLevelFiltering) {
         // Row-level filtering: Display each entry as an individual row without grouping/expansion
         displayIndividualRows(entries);
+    } else if (forceExpandedMultiFilter) {
+        // Multi-filter AND mode: show only item-set rows that satisfy ALL selected filters (PRB+HIIM etc.)
+        displayGroupedEntries(entries, { forceExpanded: true, multiFilter: true });
     } else {
         // Normal display: Group entries by week and expand multi-item entries
-        displayGroupedEntries(entries);
+        displayGroupedEntries(entries, { forceExpanded: false, multiFilter: false });
     }
     
     // Apply column visibility based on current application
@@ -1537,10 +1551,18 @@ function displayIndividualRows(entries) {
     scheduleTimeLossAudit();
 }
 
-function displayGroupedEntries(entries) {
+function displayGroupedEntries(entries, options = { forceExpanded: false, multiFilter: false }) {
     /**
      * Display entries grouped by month with month labels instead of weekend logic
      */
+    const { forceExpanded, multiFilter } = options;
+    // Build selected filter flags for multi-filter AND item-set filtering
+    const selectedFilters = {
+        prb: filters.prbOnly.checked,
+        hiim: filters.hiimOnly.checked,
+        timeLoss: filters.timeLossOnly.checked,
+        activeCount: [filters.prbOnly.checked, filters.hiimOnly.checked, filters.timeLossOnly.checked].filter(Boolean).length
+    };
     
     // Group entries by month
     const monthlyGroups = {};
@@ -1599,7 +1621,7 @@ function displayGroupedEntries(entries) {
         
         // Add entries for this month, expanding multiple items per date into separate rows
         monthEntries.forEach(entry => {
-            const expandedRows = createExpandedEntryRows(entry);
+            const expandedRows = createExpandedEntryRows(entry, forceExpanded, multiFilter ? selectedFilters : null);
             expandedRows.forEach(row => {
                 entriesTbody.appendChild(row);
             });
@@ -1646,7 +1668,7 @@ function createSingleEntryRow(entry) {
     return row;
 }
 
-function createExpandedEntryRows(entry) {
+function createExpandedEntryRows(entry, forceExpanded = false, selectedFilters = null) {
     const rows = [];
     const entryId = `entry-${entry.id}`;
 
@@ -1724,16 +1746,7 @@ function createExpandedEntryRows(entry) {
         // Fix: properly check if row_position is defined (including 0)
         const pos = (issue.row_position !== undefined && issue.row_position !== null) ? issue.row_position : idx;
         timeLossByPosition[pos] = tl;
-        if (window && window.console) {
-            console.log('[TimeLossMap] Mapping issue', {
-                idx,
-                issue,
-                timeLoss: tl,
-                rowPosition: issue.row_position,
-                mappedPosition: pos,
-                timeLossByPosition: {...timeLossByPosition}
-            });
-        }
+        // debug mapping log removed
     });
     // Fallback to legacy top-level field if no per-item time loss found
     if (!Object.keys(timeLossByPosition).length && entry.time_loss) {
@@ -1771,16 +1784,7 @@ function createExpandedEntryRows(entry) {
         const derivedTimeLoss = (itemSet.issue && itemSet.issue.time_loss)
             ? itemSet.issue.time_loss
             : (timeLossByPosition[position] || '');
-        if (window && window.console) {
-            console.log('[TimeLossMap] Building row', {
-                entryId: entry.id,
-                position,
-                isFirst,
-                derivedTimeLoss,
-                timeLossByPosition: {...timeLossByPosition},
-                issuePositions: issues.map(i => i && (i.row_position !== undefined && i.row_position !== null ? i.row_position : 'idx-fallback'))
-            });
-        }
+        // debug row build log removed
         const itemEntry = {
             ...entry,
             issue_description: itemSet.issue ? itemSet.issue.description : '',
@@ -1807,13 +1811,53 @@ function createExpandedEntryRows(entry) {
         else if (!itemSet.issue && itemSet.hiim && !itemSet.prb) rowType = 'hiim';
         else if (!itemSet.issue && itemSet.prb && itemSet.hiim) rowType = 'issue'; // mixed row
         
-        const row = createEntryRow(itemEntry, isFirst, rowType, rowId, isFirst ? totalChildRows : 0);
+        // If multi-filter AND mode is active, filter out item-sets that do not satisfy ALL active filters
+        if (selectedFilters && selectedFilters.activeCount > 1) {
+            const needsPrb = selectedFilters.prb;
+            const needsHiim = selectedFilters.hiim;
+            const needsTimeLoss = selectedFilters.timeLoss;
+            const hasPrb = !!itemSet.prb;
+            const hasHiim = !!itemSet.hiim;
+            const hasTimeLoss = !!derivedTimeLoss;
+            if (needsPrb && !hasPrb) return; // skip
+            if (needsHiim && !hasHiim) return;
+            if (needsTimeLoss && !hasTimeLoss) return;
+        }
+
+        const row = createEntryRow(itemEntry, isFirst, rowType, rowId, forceExpanded ? 0 : (isFirst ? totalChildRows : 0));
         if (!isFirst) {
-            row.classList.add('child-row', 'hidden');
-            row.setAttribute('data-parent-id', entryId);
+            if (!forceExpanded) {
+                row.classList.add('child-row', 'hidden');
+                row.setAttribute('data-parent-id', entryId);
+            } else {
+                // In forceExpanded mode treat every item-set row as standalone parent: show date, remove sub-row classes later
+                row.classList.remove('child-row', 'hidden');
+            }
         }
         rows.push(row);
     });
+
+    // Post-process for forceExpanded: replicate date/day cells and remove expand button complexity
+    if (forceExpanded && rows.length) {
+        rows.forEach(r => {
+            r.classList.remove('hidden');
+            r.classList.remove('sub-row');
+            const dateCell = r.querySelector('td[data-column="date"]');
+            if (dateCell) {
+                if (!dateCell.textContent.trim()) {
+                    dateCell.textContent = formatDate(entry.date);
+                }
+                const expandBtn = dateCell.querySelector('.expand-button');
+                if (expandBtn) expandBtn.remove();
+            }
+            const dayCell = r.querySelector('td[data-column="day"]');
+            if (dayCell && !dayCell.textContent.trim()) {
+                const dayMarkup = getDayOfWeek(entry.date, entry.infra_weekend_manual);
+                // Use innerHTML to allow <br><small> markup to render
+                dayCell.innerHTML = dayMarkup;
+            }
+        });
+    }
 
     return rows;
 }
@@ -1845,11 +1889,7 @@ function auditTimeLossCells() {
                 }
             }
         });
-        if (anomalies.length) {
-            console.warn('[TimeLossAudit] Detected rendering anomalies', anomalies);
-        } else {
-            console.log('[TimeLossAudit] All time_loss cells rendered as expected');
-        }
+        // audit summary logs removed (anomalies silently ignored to avoid noise)
     } catch (e) {
         console.warn('[TimeLossAudit] Audit failed', e);
     }
@@ -1857,40 +1897,7 @@ function auditTimeLossCells() {
 
 // Developer diagnostic helper (non-production impact): run in console to verify mapping
 // Example: window._debugMap(2,1,1) => two issues, one prb, one hiim bottom-aligned
-window._debugMap = function(issueCount, prbCount, hiimCount) {
-    const issueList = Array.from({length: issueCount}, (_,i)=>`ISSUE_${i+1}`);
-    const prbList = Array.from({length: prbCount}, (_,i)=>`PRB_${i+1}`);
-    const hiimList = Array.from({length: hiimCount}, (_,i)=>`HIIM_${i+1}`);
-    const extraPrb = Math.max(0, prbCount - issueCount);
-    const extraHiim = Math.max(0, hiimCount - issueCount);
-    const extraRows = Math.max(extraPrb, extraHiim);
-    const totalRows = Math.max(1, issueCount) + extraRows;
-    const prbStartIndex = prbCount <= issueCount ? (issueCount - prbCount) : 0;
-    const hiimStartIndex = hiimCount <= issueCount ? (issueCount - hiimCount) : 0;
-    const rows = [];
-    for (let i=0;i<totalRows;i++) {
-        let issue = i < issueCount ? issueList[i] : null;
-        let prb = null;
-        if (prbCount > 0) {
-            if (prbCount <= issueCount) {
-                if (i >= prbStartIndex && i < issueCount) prb = prbList[i - prbStartIndex];
-            } else {
-                if (i < issueCount) prb = prbList[i]; else prb = prbList[issueCount + (i - issueCount)] || null;
-            }
-        }
-        let hiim = null;
-        if (hiimCount > 0) {
-            if (hiimCount <= issueCount) {
-                if (i >= hiimStartIndex && i < issueCount) hiim = hiimList[i - hiimStartIndex];
-            } else {
-                if (i < issueCount) hiim = hiimList[i]; else hiim = hiimList[issueCount + (i - issueCount)] || null;
-            }
-        }
-        rows.push({row:i+1, issue, prb, hiim});
-    }
-    console.table(rows);
-    return rows;
-};
+// window._debugMap removed during cleanup
 
 // Function to toggle visibility of child rows
 function toggleChildRows(entryId) {
@@ -2143,7 +2150,7 @@ function createEntryRow(entry, isFirstRow, itemType, entryId, childCount) {
     }
     
     // Get day of week (only show on first row)
-    const dayOfWeek = isFirstRow ? getDayOfWeek(entry.date, entry.infra_weekend_manual) : '';
+    const dayOfWeekRaw = isFirstRow ? getDayOfWeek(entry.date, entry.infra_weekend_manual) : '';
     
     // Show common fields only on first row, leave empty on sub-rows
     const prcMailDisplay = isFirstRow ? prcMailBadge : '';
@@ -2222,7 +2229,8 @@ function createEntryRow(entry, isFirstRow, itemType, entryId, childCount) {
     // Render all columns in the current order as defined by columnOrder and add data-column for robustness
     const columnContent = {
         date: { html: dateDisplay, cls: 'date-cell' },
-        day: { html: dayOfWeek, cls: 'day-column' },
+        // Allow HTML (Infra Week label) in day cell; we'll set via innerHTML after injection
+        day: { html: dayOfWeekRaw, cls: 'day-column', isHtml: true },
         prc_mail: { html: prcMailDisplay, cls: 'common-field' },
         cp_alerts: { html: cpAlertsDisplay, cls: 'common-field' },
     quality_status: { html: qualityDisplay, cls: 'common-field' },
@@ -2276,12 +2284,16 @@ function createEntryRow(entry, isFirstRow, itemType, entryId, childCount) {
         return `<td class="${c.cls}" data-column="${col}"${style}>${shouldShow ? (c.html || '') : ''}</td>`;
     }).join('');
     row.innerHTML = cellsHtml;
-    if (window && window.console) {
-        try {
-            const tlCellValue = entry.time_loss || (isFirstRow && !entry.__any_time_loss ? 'N/A' : '');
-            console.log('[TimeLossRender]', { entryId, isFirstRow, itemType, time_loss: entry.time_loss, rendered: tlCellValue });
-        } catch(e) {}
-    }
+    // Post-process HTML-enabled cells (currently day column) to ensure markup renders (e.g., Infra Week label)
+    try {
+        if (dayOfWeekRaw && dayOfWeekRaw.includes('<') ) {
+            const dayCell = row.querySelector('td[data-column="day"]');
+            if (dayCell) {
+                dayCell.innerHTML = dayOfWeekRaw; // safe: generated string limited to known markup
+            }
+        }
+    } catch(e) { /* noop */ }
+    // time loss render debug removed
 
     // Attach data attributes for audit purposes
     if (entry.time_loss) {
@@ -4327,8 +4339,7 @@ async function handleCVAREntrySubmit(event) {
         const url = currentEntryId ? `/api/entries/${currentEntryId}` : '/api/entries';
         const method = currentEntryId ? 'PUT' : 'POST';
         
-        console.log(`🚀 Making ${method} request to: ${url}`);
-        console.log('📤 Request body:', JSON.stringify(entryData, null, 2));
+    // submission debug logs removed
         
         const response = await fetch(url, {
             method: method,
@@ -4339,15 +4350,15 @@ async function handleCVAREntrySubmit(event) {
             body: JSON.stringify(entryData)
         });
         
-        console.log(`📥 Response status: ${response.status} ${response.statusText}`);
+    // response status debug removed
         
         if (response.ok) {
-            console.log('✅ Entry saved successfully!');
+            // success debug removed
             hideEntryModal();
             loadData(); // Refresh data
         } else {
             const error = await response.json();
-            console.log('❌ Error response:', error);
+            // error body debug removed
             if (error.error && error.error.includes('already exists')) {
                 alert('Error: ' + error.error + '\n\nPlease edit the existing entry or choose a different date.');
             } else {
@@ -4370,17 +4381,12 @@ async function handleXVAEntrySubmit(event) {
         return;
     }
     
-    console.log('=== XVA SAVE BUTTON DEBUG ===');
-    console.log('Current application:', filters.application);
-    console.log('XVA Form data being submitted...');
+    // removed XVA debug banner logs
     
     const formData = new FormData(xvaEntryForm);
     
     // Debug: Log all form data
-    console.log('Form data entries:');
-    for (let [key, value] of formData.entries()) {
-        console.log(`  ${key}: ${value}`);
-    }
+    // removed per-field form data logging
     
     // Get XVA timing fields (24-hour format, no AM/PM needed)
     const acqTime = formData.get('acq_text');
@@ -4455,7 +4461,7 @@ async function handleXVAEntrySubmit(event) {
         if (firstWithTimeLoss) entryData.time_loss = firstWithTimeLoss.time_loss;
     }
     
-    console.log('📝 Constructed XVA entry data:', entryData);
+    // removed constructed entry data log
     
     // Validate conditional status requirements
     const validationError = validateXVAStatusRequirements(entryData);
@@ -4468,8 +4474,7 @@ async function handleXVAEntrySubmit(event) {
         const url = currentEntryId ? `/api/entries/${currentEntryId}` : '/api/entries';
         const method = currentEntryId ? 'PUT' : 'POST';
         
-        console.log(`🚀 Making ${method} request to: ${url}`);
-        console.log('📤 Request body:', JSON.stringify(entryData, null, 2));
+    // submission debug logs removed
         
         const response = await fetch(url, {
             method: method,
@@ -4480,15 +4485,15 @@ async function handleXVAEntrySubmit(event) {
             body: JSON.stringify(entryData)
         });
         
-        console.log(`📥 Response status: ${response.status} ${response.statusText}`);
+    // response status debug removed
         
         if (response.ok) {
-            console.log('✅ XVA Entry saved successfully!');
+            // success debug removed
             hideEntryModal();
             loadData(); // Refresh data
         } else {
             const error = await response.json();
-            console.log('❌ Error response:', error);
+            // error body debug removed
             if (error.error && error.error.includes('already exists')) {
                 alert('Error: ' + error.error + '\n\nPlease edit the existing entry or choose a different date.');
             } else {
@@ -6876,8 +6881,7 @@ function updateFieldRequirements(hasId, statusSelect, linkInput, linkRequiredInd
 }
 
 function validateConditionalFields() {
-    console.log('🔍 Validating conditional fields...');
-    console.log('🔍 Current application:', filters.application);
+    // validation debug removed
     
     const prbIdInput = document.getElementById('entry-prb-id-number');
     const prbStatusSelect = document.getElementById('entry-prb-id-status');
@@ -6887,21 +6891,14 @@ function validateConditionalFields() {
     const hiimStatusSelect = document.getElementById('entry-hiim-id-status');
     const hiimLinkInput = document.getElementById('entry-hiim-link');
     
-    console.log('📋 Field values:');
-    console.log('  PRB ID:', prbIdInput ? prbIdInput.value : 'element not found');
-    console.log('  PRB Status:', prbStatusSelect ? prbStatusSelect.value : 'element not found');
-    console.log('  PRB Link:', prbLinkInput ? prbLinkInput.value : 'element not found');
-    console.log('  HIIM ID:', hiimIdInput ? hiimIdInput.value : 'element not found');
-    console.log('  HIIM Status:', hiimStatusSelect ? hiimStatusSelect.value : 'element not found');
-    console.log('  HIIM Link:', hiimLinkInput ? hiimLinkInput.value : 'element not found');
+    // field value debug removed
     
     let isValid = true;
     let errorMessage = '';
     
     // Application-specific validation
     if (filters.application === 'XVA') {
-        console.log('🔍 Validating XVA-specific fields...');
-        console.log('🔍 Quality fields are optional for XVA entries');
+    // XVA-specific debug removed
         
         // For XVA, quality fields are optional - no validation needed
         // Just clear any existing error styling
@@ -6955,15 +6952,13 @@ function validateConditionalFields() {
         }
     }
     
-    console.log('🔍 Validation result:');
-    console.log('  isValid:', isValid);
-    console.log('  errorMessage:', errorMessage.trim() || 'No errors');
+    // validation summary debug removed
     
     if (!isValid) {
-        console.log('❌ Validation failed, showing alert');
+    // validation failure debug removed
         alert(errorMessage.trim());
     } else {
-        console.log('✅ Validation passed');
+    // validation success debug removed
     }
     
     return isValid;
@@ -6977,7 +6972,7 @@ let startWidth = 0;
 let resizeIndicator = null;
 
 function initializeColumnResizing() {
-    console.log('🔧 Initializing column resizing...');
+    // column resizing init debug removed
     
     // Load saved column widths
     loadColumnWidths();
@@ -6997,15 +6992,15 @@ function initializeColumnResizing() {
     document.addEventListener('touchmove', handleResize, { passive: false });
     document.addEventListener('touchend', stopResize);
     
-    console.log('✅ Column resizing initialized');
+    // column resizing init complete removed
 }
 
 function reinitializeColumnResizing() {
-    console.log('🔄 Reinitializing column resizing...');
+    // reinitializing resize debug removed
     
     // Remove existing event listeners from all resize handles
     const existingHandles = document.querySelectorAll('.column-resize-handle');
-    console.log('🔍 Found', existingHandles.length, 'existing resize handles');
+    // existing handles count debug removed
     existingHandles.forEach(handle => {
         handle.removeEventListener('mousedown', startResize);
         handle.removeEventListener('touchstart', startResize);
@@ -7022,7 +7017,7 @@ function reinitializeColumnResizing() {
         if (isVisible) {
             const resizeHandle = header.querySelector('.column-resize-handle');
             if (resizeHandle) {
-                console.log(`🔍 Adding listener to visible column: ${columnName}`);
+                // per-column listener debug removed
                 
                 // Ensure the resize handle is properly positioned and visible
                 resizeHandle.style.pointerEvents = 'auto';
@@ -7032,20 +7027,20 @@ function reinitializeColumnResizing() {
                 resizeHandle.addEventListener('touchstart', startResize, { passive: false });
                 visibleHandles++;
             } else {
-                console.log(`❌ No resize handle found for visible column: ${columnName}`);
+                // missing resize handle debug removed
             }
         } else {
-            console.log(`🔍 Skipping hidden column: ${columnName}`);
+            // skipping hidden column debug removed
         }
     });
     
-    console.log('✅ Column resizing reinitialized for', visibleHandles, 'visible handles');
+    // reinit complete debug removed
 }
 
 // Debug function to test column resizing - call from browser console
 
 function startResize(e) {
-    console.log('🖱️ startResize called on:', e.target);
+    // start resize debug removed
     e.preventDefault();
     e.stopPropagation();
     
@@ -7053,7 +7048,7 @@ function startResize(e) {
     currentResizeColumn = e.target.closest('th');
     
     if (!currentResizeColumn) {
-        console.error('❌ Could not find column header for resize handle');
+    // resize header missing (error log suppressed)
         return;
     }
     
@@ -7072,7 +7067,7 @@ function startResize(e) {
     document.body.style.userSelect = 'none';
     document.body.style.cursor = 'col-resize';
     
-    console.log('🔄 Started resizing column:', currentResizeColumn.dataset.column, 'Width:', startWidth);
+    // resize start debug removed
 }
 
 function handleResize(e) {
@@ -7085,7 +7080,7 @@ function handleResize(e) {
     const deltaX = clientX - startX;
     const newWidth = Math.max(80, Math.min(400, startWidth + deltaX));
     
-    console.log('📏 Resizing to width:', newWidth);
+    // resizing progress debug removed
     
     // Update column width
     currentResizeColumn.style.width = newWidth + 'px';
@@ -7131,7 +7126,7 @@ function stopResize(e) {
         // Save column width
         saveColumnWidth(currentResizeColumn.dataset.column, currentResizeColumn.offsetWidth);
         
-        console.log('✅ Finished resizing column:', currentResizeColumn.dataset.column, 'Width:', currentResizeColumn.offsetWidth);
+    // resize finished debug removed
         
         currentResizeColumn = null;
     }
@@ -7176,16 +7171,16 @@ function saveColumnWidth(columnName, width) {
         const savedWidths = JSON.parse(localStorage.getItem('columnWidths') || '{}');
         savedWidths[columnName] = width;
         localStorage.setItem('columnWidths', JSON.stringify(savedWidths));
-        console.log('💾 Saved width for column', columnName, ':', width);
+    // saved width debug removed
     } catch (error) {
-        console.error('❌ Error saving column width:', error);
+    // save width error suppressed
     }
 }
 
 function loadColumnWidths() {
     try {
         const savedWidths = JSON.parse(localStorage.getItem('columnWidths') || '{}');
-        console.log('📂 Loading saved column widths:', savedWidths);
+    // loading widths debug removed
         
         Object.entries(savedWidths).forEach(([columnName, width]) => {
             const column = document.querySelector(`th[data-column="${columnName}"]`);
@@ -7213,11 +7208,11 @@ function loadColumnWidths() {
                     });
                 }
                 
-                console.log('✅ Applied width to column', columnName, ':', width);
+                // applied width debug removed
             }
         });
     } catch (error) {
-        console.error('❌ Error loading column widths:', error);
+    // load widths error suppressed
     }
 }
 
@@ -7231,7 +7226,7 @@ function performSearch() {
         return;
     }
     
-    console.log('🔍 Performing search for:', searchTerm);
+    // search debug removed
     
     const tableRows = document.querySelectorAll('#entries-table tbody tr');
     let visibleRowCount = 0;
@@ -7294,11 +7289,11 @@ function performSearch() {
         }
     });
     
-    console.log('🔍 Search complete. Visible rows:', visibleRowCount, '(Month headers hidden during search)');
+    // search completion debug removed
 }
 
 function showAllRows() {
-    console.log('🔍 Showing all rows');
+    // show all rows debug removed
     
     const tableRows = document.querySelectorAll('#entries-table tbody tr');
     
@@ -7348,7 +7343,7 @@ function updateMonthHeadersVisibility() {
 }
 
 function clearSearch() {
-    console.log('🔍 Clearing search');
+    // clear search debug removed
     freeSearchInput.value = '';
     showAllRows();
 }

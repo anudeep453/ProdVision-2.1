@@ -1,18 +1,20 @@
 """
-Updated SharePoint SQLite Adapter for Independent Rows
-This version eliminates parent-child dependencies and treats each row independently
+Independent Row SQLite Adapter
+Each application uses its own SQLite DB; rows are independent (no parent-child relationships).
 """
 
 import os
 import sqlite3
 from datetime import datetime
 from typing import Dict, List, Optional, Any
+import logging
+
+logger = logging.getLogger("prodvision.adapter")
 
 class IndependentRowSQLiteAdapter:
     """SQLite adapter with independent row structure - no parent-child dependencies"""
     
-    def __init__(self, sharepoint_url: str, db_name: str = "prodvision.db"):
-        self.sharepoint_url = sharepoint_url.rstrip('/')
+    def __init__(self, db_name: str = "prodvision.db"):
         self.db_name = db_name
         self.local_db_path = f"./data/{db_name}"
         self.ensure_data_directory()
@@ -339,6 +341,7 @@ class IndependentRowSQLiteAdapter:
             
         except Exception as e:
             conn.rollback()
+            logger.error("Error creating entry: %s", e, exc_info=True)
             raise e
         finally:
             conn.close()
@@ -510,9 +513,7 @@ class IndependentRowSQLiteAdapter:
                 
         except Exception as e:
             conn.rollback()
-            print(f"❌ Error updating entry {entry_id}: {str(e)}")
-            import traceback
-            traceback.print_exc()
+            logger.error("Error updating entry %s: %s", entry_id, e, exc_info=True)
             return None
         finally:
             conn.close()
@@ -894,9 +895,7 @@ class IndependentRowSQLiteAdapter:
             return target_entry
             
         except Exception as e:
-            print(f"❌ Error in get_entry_by_id({entry_id}): {str(e)}")
-            import traceback
-            traceback.print_exc()
+            logger.error("Error in get_entry_by_id(%s): %s", entry_id, e, exc_info=True)
             return None
     
     def get_setting(self, key: str) -> Optional[str]:
@@ -933,11 +932,11 @@ class EntryManager:
     
     def __init__(self):
         self.adapters = {
-            'CVAR ALL': IndependentRowSQLiteAdapter('', 'cvar_all.db'),
-            'CVAR NYQ': IndependentRowSQLiteAdapter('', 'cvar_nyq.db'),
-            'XVA': IndependentRowSQLiteAdapter('', 'xva.db'),
-            'REG': IndependentRowSQLiteAdapter('', 'reg.db'),
-            'OTHERS': IndependentRowSQLiteAdapter('', 'others.db')
+            'CVAR ALL': IndependentRowSQLiteAdapter('cvar_all.db'),
+            'CVAR NYQ': IndependentRowSQLiteAdapter('cvar_nyq.db'),
+            'XVA': IndependentRowSQLiteAdapter('xva.db'),
+            'REG': IndependentRowSQLiteAdapter('reg.db'),
+            'OTHERS': IndependentRowSQLiteAdapter('others.db')
         }
     
     def get_entries_by_application(self, application_name: str, start_date: str = None, end_date: str = None) -> List[Dict]:

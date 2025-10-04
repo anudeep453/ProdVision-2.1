@@ -26,5 +26,5 @@ openpyxl==3.0.9
 # No additional package needed
 
 # Development Dependencies (optional)
-# pytest==6.2.5
+pytest==6.2.5
 # black==21.9b0

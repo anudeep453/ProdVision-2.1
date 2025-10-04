@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ccr-daily-prodruction</title>
+    <title>CCR Daily Production Dashboard</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -272,7 +272,7 @@
                             </th>
                             <th draggable="true" data-column="xva_remarks" class="draggable-header">
                                 <span class="column-content">
-                                    <span class="column-title">Quality Issue Description</span>
+                                    <span class="column-title">XVA Quality Issue</span>
                                     <span class="drag-handle">⋮⋮</span>
                                 </span>
                                 <div class="column-resize-handle" title="Drag to resize column"></div>
@@ -492,8 +492,8 @@
                         <button type="button" id="add-combined-item-btn" class="btn btn-sm btn-success">+ Add Item Card</button>
                     </div>
                     
-                    <!-- Legacy single-field inputs (hidden) -->
-                    <div style="display:none;">
+                    <!-- Legacy single-field inputs retained for backward compatibility (kept hidden) -->
+                    <div class="hidden">
                         <textarea id="entry-description" name="issue_description" rows="3" placeholder="Enter punctuality issue description"></textarea>
                         <input type="number" id="entry-prb-id-number" name="prb_id_number" placeholder="Enter PRB ID" min="1" step="1">
                         <select id="entry-prb-id-status" name="prb_id_status">

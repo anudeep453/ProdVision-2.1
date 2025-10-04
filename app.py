@@ -3,17 +3,18 @@ import os
 import threading
 import time
 import random
+import logging
 
 # Check Python version compatibility
 if sys.version_info < (3, 7):
-    print("❌ Python 3.7.0 or higher is required")
-    print(f"Current version: {sys.version}")
-    print("Please install Python 3.7.0 from https://www.python.org/downloads/")
+    # Use direct stderr prints before logging config just for hard failure clarity
+    sys.stderr.write("❌ Python 3.7.0 or higher is required\n")
+    sys.stderr.write(f"Current version: {sys.version}\n")
+    sys.stderr.write("Please install Python 3.7.0 from https://www.python.org/downloads/\n")
     sys.exit(1)
 elif sys.version_info >= (3, 8):
-    print(f"⚠️  Python {sys.version_info.major}.{sys.version_info.minor} detected")
-    print("This application is optimized for Python 3.7.0")
-    print("Some features may not work as expected with newer versions")
+    # Warning will be logged after logger initialization (deferred)
+    pass
 
 from flask import Flask, render_template, request, jsonify, session, send_file
 from flask_session import Session
@@ -26,6 +27,28 @@ import io
 # Import new independent row adapter
 from independent_row_adapter import EntryManager as ProductionEntryManager
 from config import SECRET_KEY, DEBUG, HOST, PORT
+
+# Centralized logging configuration
+# We configure logging early so any subsequent module imports can use it.
+LOG_LEVEL_NAME = os.getenv("PRODVISION_LOG_LEVEL")  # Optional override (e.g., INFO, DEBUG, WARNING)
+
+def _resolve_log_level():
+    if LOG_LEVEL_NAME:
+        return getattr(logging, LOG_LEVEL_NAME.upper(), logging.INFO)
+    # Fall back to DEBUG flag: DEBUG -> INFO (not too noisy) else WARNING
+    return logging.INFO if DEBUG else logging.WARNING
+
+logging.basicConfig(
+    level=_resolve_log_level(),
+    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S"
+)
+
+logger = logging.getLogger("prodvision")
+
+# Reduce verbosity of Werkzeug request logs unless explicit DEBUG requested
+if not DEBUG and not LOG_LEVEL_NAME:
+    logging.getLogger('werkzeug').setLevel(logging.ERROR)
 
 app = Flask(__name__)
 
@@ -46,6 +69,9 @@ Session(app)
 
 # Initialize SharePoint SQLite database manager
 entry_manager = ProductionEntryManager()
+
+# Global lock to guard against race conditions creating duplicate date/application entries
+_create_entry_lock = threading.Lock()
 
 # Session cleanup functions
 def cleanup_expired_session_files():
@@ -75,16 +101,16 @@ def cleanup_expired_session_files():
                 try:
                     os.remove(file_path)
                     deleted_count += 1
-                    print(f"Deleted expired session file: {filename}")
+                    logger.debug("Deleted expired session file: %s", filename)
                 except OSError as e:
-                    print(f"Error deleting session file {filename}: {e}")
+                    logger.warning("Error deleting session file %s: %s", filename, e)
         
         if deleted_count > 0:
-            print(f"Session cleanup completed: {deleted_count} files deleted")
+            logger.info("Session cleanup completed: %d files deleted", deleted_count)
         
         return deleted_count
     except Exception as e:
-        print(f"Session cleanup error: {e}")
+        logger.error("Session cleanup error: %s", e, exc_info=True)
         return 0
 
 def delete_current_session_file():
@@ -103,11 +129,11 @@ def delete_current_session_file():
             
             if os.path.exists(session_file_path):
                 os.remove(session_file_path)
-                print(f"Immediately deleted session file: {session_key}")
+                logger.debug("Immediately deleted session file: %s", session_key)
                 return True
         return False
     except Exception as e:
-        print(f"Error deleting current session file: {e}")
+        logger.error("Error deleting current session file: %s", e, exc_info=True)
         return False
 
 def check_and_cleanup_expired_sessions():
@@ -135,13 +161,13 @@ def check_and_cleanup_expired_sessions():
                 try:
                     os.remove(file_path)
                     deleted_count += 1
-                    print(f"Immediately deleted expired session file: {filename}")
+                    logger.debug("Immediately deleted expired session file: %s", filename)
                 except OSError as e:
-                    print(f"Error deleting expired session file {filename}: {e}")
+                    logger.warning("Error deleting expired session file %s: %s", filename, e)
         
         return deleted_count
     except Exception as e:
-        print(f"Error in immediate session cleanup: {e}")
+        logger.error("Error in immediate session cleanup: %s", e, exc_info=True)
         return 0
 
 def periodic_session_cleanup():
@@ -172,23 +198,22 @@ def get_session_stats():
             'total_size_mb': round(total_size / (1024 * 1024), 2)
         }
     except Exception as e:
-        print(f"Error getting session stats: {e}")
+        logger.error("Error getting session stats: %s", e, exc_info=True)
         return {'total_files': 0, 'total_size': 0}
 
 # Helper functions for data validation and conversion
 def validate_entry_data(data):
-    """Validate production entry data based on application type"""
+    """Validate production entry data based on application type.
+    NOTE: OTHERS should behave like XVA/REG for required fields (only date & application_name).
+    """
     application_name = data.get('application_name', '')
-    
+
     # Common required fields for all applications
     common_required_fields = ['date', 'application_name']
-    
+
     # Define required fields based on application type
-    if application_name == 'XVA':
-        # XVA-specific required fields (only date and application_name are required)
-        required_fields = common_required_fields
-    elif application_name == 'REG':
-        # REG-specific required fields (only date and application_name are required)
+    if application_name in ('XVA', 'REG', 'OTHERS'):
+        # Minimal requirement set
         required_fields = common_required_fields
     else:
         # CVAR (ALL/NYQ) required fields: require either single-time fields or arrays
@@ -363,11 +388,17 @@ def get_entries():
         prb_only = request.args.get('prb_only', 'false').lower() == 'true'
         hiim_only = request.args.get('hiim_only', 'false').lower() == 'true'
         time_loss_only = request.args.get('time_loss_only', 'false').lower() == 'true'
-        
-        # Determine if we need row-level filtering
-        use_row_level_filtering = prb_only or hiim_only or time_loss_only
+
+        # Count how many row-level filters are active
+        active_row_filters = [prb_only, hiim_only, time_loss_only]
+        active_row_filters_count = sum(1 for f in active_row_filters if f)
+
+        # We only use the old row-level (independent row) mode if EXACTLY one filter is selected.
+        # When multiple filters are chosen we need AND semantics across the grouped entry, so we
+        # fetch grouped entries and apply all conditions together.
+        use_row_level_filtering = (active_row_filters_count == 1)
         row_type_filter = None
-        
+
         if use_row_level_filtering:
             if prb_only:
                 row_type_filter = 'prb'
@@ -375,22 +406,19 @@ def get_entries():
                 row_type_filter = 'hiim'
             elif time_loss_only:
                 row_type_filter = 'time_loss'
-        
-        # Get entries - use row-level filtering if needed
+
+        # Retrieval strategy
         if use_row_level_filtering:
+            # Single filter -> independent row fetching
             if application:
-                # Get individual rows from specific application database with row-type filtering
                 all_entries = entry_manager.get_individual_rows_by_application(application, start_date, end_date, row_type_filter)
             else:
-                # Get all individual rows from all databases with row-type filtering
                 all_entries = entry_manager.get_all_individual_rows(row_type_filter)
         else:
-            # Use normal grouped entry retrieval for other filters
+            # Grouped mode (no row-level filters or multi-filter AND mode)
             if application:
-                # Get entries from specific application database with date filtering
                 all_entries = entry_manager.get_entries_by_application(application, start_date, end_date)
             else:
-                # Get all entries from all databases
                 all_entries = entry_manager.get_all_entries()
         
         # Apply remaining filters (non-date, non-application filters)
@@ -418,20 +446,39 @@ def get_entries():
                 if entry.get('quality_status') != quality_status:
                     continue
             
-            # Skip PRB/HIIM filters since they're already handled at database level for row-level filtering
-            if not use_row_level_filtering:
-                # PRB only filter (only apply if not using row-level filtering)
-                if prb_only:
-                    # Accept legacy single field or new prbs array
-                    if not entry.get('prb_id_number') and not (isinstance(entry.get('prbs'), list) and len(entry.get('prbs')) > 0):
-                        continue
-                
-                # HIIM only filter (only apply if not using row-level filtering)
-                if hiim_only:
-                    # Accept legacy single field or new hiims array
-                    if not entry.get('hiim_id_number') and not (isinstance(entry.get('hiims'), list) and len(entry.get('hiims')) > 0):
-                        continue
-            
+            # Row-level single-filter case is already handled by query (row_type_filter) so we accept entry
+            if use_row_level_filtering:
+                filtered_entries.append(entry)
+                continue
+
+            # Multi-filter AND logic (or zero filters -> no extra constraints)
+            # Helper checks
+            def has_prb(ent):
+                if ent.get('prb_id_number'):
+                    return True
+                prbs = ent.get('prbs') or []
+                return any(p and (p.get('prb_id_number') or p.get('prb_id')) for p in prbs)
+
+            def has_hiim(ent):
+                if ent.get('hiim_id_number'):
+                    return True
+                hiims = ent.get('hiims') or []
+                return any(h and (h.get('hiim_id_number') or h.get('hiim_id')) for h in hiims)
+
+            def has_time_loss(ent):
+                if ent.get('time_loss'):
+                    return True
+                issues = ent.get('issues') or []
+                return any(i and i.get('time_loss') for i in issues)
+
+            # Apply AND conditions only for the filters that are active
+            if prb_only and not has_prb(entry):
+                continue
+            if hiim_only and not has_hiim(entry):
+                continue
+            if time_loss_only and not has_time_loss(entry):
+                continue
+
             filtered_entries.append(entry)
         
         # Sort by date descending, then by created_at descending
@@ -448,24 +495,17 @@ def get_entries():
 def get_entry(entry_id):
     """Get a specific production entry by ID"""
     try:
-        print(f"🔍 Fetching entry with ID: {entry_id}")
-        
         # Try to get application from query param for more efficient lookup
         application = request.args.get('application')
-        print(f"🔍 Application filter: {application}")
-        
         entry = entry_manager.get_entry_by_id(entry_id, application)
-        print(f"🔍 Entry found: {entry is not None}")
-        
         if entry:
+            logger.debug("Entry %s fetched (application=%s)", entry_id, application)
             return jsonify(entry)
         else:
-            print(f"❌ Entry {entry_id} not found")
+            logger.info("Entry %s not found (application=%s)", entry_id, application)
             return jsonify({'error': 'Entry not found'}), 404
     except Exception as e:
-        print(f"❌ Error fetching entry {entry_id}: {str(e)}")
-        import traceback
-        traceback.print_exc()
+        logger.error("Error fetching entry %s: %s", entry_id, e, exc_info=True)
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/entries', methods=['POST'])
@@ -485,17 +525,15 @@ def create_entry():
         if not is_valid:
             return jsonify({'error': error_msg}), 400
         
-        # Check if entry already exists for this date and application in the specific database
-        entry_date = convert_date_string(data['date'])
-        application_name = data['application_name']
-        existing_entries = entry_manager.get_entries_by_application(application_name)
-        
-        for existing_entry in existing_entries:
-            if existing_entry.get('date') == data['date']:
-                return jsonify({'error': f'An entry already exists for {application_name} on {data["date"]}'}), 400
-        
-        # Create new entry
-        entry = entry_manager.create_entry(data)
+        # Serialize duplicate date/application check & create to avoid race
+        with _create_entry_lock:
+            application_name = data['application_name']
+            existing_entries = entry_manager.get_entries_by_application(application_name)
+            for existing_entry in existing_entries:
+                if existing_entry.get('date') == data['date']:
+                    return jsonify({'error': f'An entry already exists for {application_name} on {data["date"]}'}), 400
+            # Create new entry
+            entry = entry_manager.create_entry(data)
         
         if entry:
             return jsonify(entry), 201
@@ -510,7 +548,7 @@ def update_entry(entry_id):
     """Update an existing production entry"""
     try:
         data = request.get_json()
-        print(f"API update_entry called for id={entry_id} with data:", data)
+        logger.debug("API update_entry called for id=%s", entry_id)
         
         # Get existing entry - search all databases
         existing_entry = entry_manager.get_entry_by_id(entry_id)
@@ -547,7 +585,7 @@ def update_entry(entry_id):
         else:
             return jsonify({'error': 'Failed to update entry'}), 500
     except Exception as e:
-        print('Exception in API update_entry:', e)
+        logger.error('Exception in API update_entry id=%s: %s', entry_id, e, exc_info=True)
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/entries/<int:entry_id>', methods=['DELETE'])
@@ -852,17 +890,30 @@ def get_stats():
                     punctuality_counts['Yellow'] += 1
                     monthly_punctuality[month_key]['Yellow'] += 1
             
-            # Count PRB statuses
+            # Count PRB statuses (legacy single + array rows)
             prb_id_status = entry.get('prb_id_status')
             if prb_id_status:
-                prb_counts[prb_id_status] += 1
-                monthly_prb[month_key][prb_id_status] += 1
-            
-            # Count HIIM statuses
+                if prb_id_status in prb_counts:
+                    prb_counts[prb_id_status] += 1
+                    monthly_prb[month_key][prb_id_status] += 1
+            # Also inspect prbs array if present
+            if isinstance(entry.get('prbs'), list):
+                for prb in entry['prbs']:
+                    if prb and prb.get('prb_id_status') in prb_counts:
+                        prb_counts[prb['prb_id_status']] += 1
+                        monthly_prb[month_key][prb['prb_id_status']] += 1
+
+            # Count HIIM statuses (legacy single + array rows)
             hiim_id_status = entry.get('hiim_id_status')
             if hiim_id_status:
-                hiim_counts[hiim_id_status] += 1
-                monthly_hiim[month_key][hiim_id_status] += 1
+                if hiim_id_status in hiim_counts:
+                    hiim_counts[hiim_id_status] += 1
+                    monthly_hiim[month_key][hiim_id_status] += 1
+            if isinstance(entry.get('hiims'), list):
+                for hiim in entry['hiims']:
+                    if hiim and hiim.get('hiim_id_status') in hiim_counts:
+                        hiim_counts[hiim['hiim_id_status']] += 1
+                        monthly_hiim[month_key][hiim['hiim_id_status']] += 1
             
             application_name = entry.get('application_name', 'Unknown')
             app_counts[application_name] = app_counts.get(application_name, 0) + 1
@@ -1123,6 +1174,7 @@ def initialize_database():
         cleanup_expired_session_files()
         
     except Exception as e:
+        logger.error("Database initialization error: %s", e, exc_info=True)
         raise
 
 if __name__ == '__main__':
@@ -1133,9 +1185,17 @@ if __name__ == '__main__':
     cleanup_thread = threading.Thread(target=periodic_session_cleanup, daemon=True)
     cleanup_thread.start()
     
-    print("Starting ProdVision Dashboard...")
-    print(f"Access the dashboard at: http://{HOST}:{PORT}")
-    print("Default admin password: admin123")
-    print("Session cleanup: Enabled (runs every 30 minutes)")
-    print("Press Ctrl+C to stop the server")
+    # Log Python version warning deferred earlier if needed
+    if sys.version_info >= (3, 8):
+        logger.warning(
+            "Python %s.%s detected. Application optimized for 3.7. Some features may not work as expected.",
+            sys.version_info.major,
+            sys.version_info.minor
+        )
+
+    logger.info("Starting ProdVision Dashboard...")
+    logger.info("Access the dashboard at: http://%s:%s", HOST, PORT)
+    logger.warning("Default admin password: admin123 (CHANGE THIS IN PRODUCTION)")
+    logger.info("Session cleanup: Enabled (runs every 30 minutes)")
+    logger.info("Press Ctrl+C to stop the server")
     app.run(debug=DEBUG, host=HOST, port=PORT)
