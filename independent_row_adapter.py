@@ -749,22 +749,46 @@ class IndependentRowSQLiteAdapter:
     
     def delete_entry(self, entry_id: int) -> bool:
         """
-        Delete a specific independent entry
-        WARNING: This deletes only the specific row, not related rows
+        Delete an entry and all related rows that belong to the same logical entry
+        This ensures complete deletion of the entire entry group (main, PRB, HIIM, issue rows)
         """
         conn = self.get_connection()
         cursor = conn.cursor()
         
         try:
-            cursor.execute("DELETE FROM entries WHERE id = ?", (entry_id,))
-            deleted = cursor.rowcount > 0
+            # First, get the grouping_key of the entry to be deleted
+            cursor.execute("SELECT grouping_key FROM entries WHERE id = ?", (entry_id,))
+            result = cursor.fetchone()
+            
+            if not result:
+                logger.debug(f"Entry {entry_id} not found for deletion")
+                return False  # Entry not found
+            
+            grouping_key = result[0]
+            logger.debug(f"Deleting all entries with grouping_key: {grouping_key}")
+            
+            # Delete all rows with the same grouping_key (entire logical entry)
+            cursor.execute("DELETE FROM entries WHERE grouping_key = ?", (grouping_key,))
+            deleted_count = cursor.rowcount
+            deleted = deleted_count > 0
+            
+            logger.debug(f"Deleted {deleted_count} rows for grouping_key: {grouping_key}")
+            
             conn.commit()
             
-            # Force a checkpoint to ensure WAL changes are applied immediately
-            cursor.execute("PRAGMA wal_checkpoint(FULL)")
+            # Force WAL checkpoint and ensure all changes are written to the main database
+            cursor.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+            cursor.execute("PRAGMA synchronous=FULL") 
+            
+            # Additional verification: check that the entries are actually gone
+            cursor.execute("SELECT COUNT(*) FROM entries WHERE grouping_key = ?", (grouping_key,))
+            remaining_count = cursor.fetchone()[0]
+            if remaining_count > 0:
+                logger.warning(f"Warning: {remaining_count} entries still exist with grouping_key {grouping_key} after deletion")
             
             return deleted
         except Exception as e:
+            logger.error(f"Error deleting entry {entry_id}: {e}")
             conn.rollback()
             raise e
         finally:
