@@ -3938,7 +3938,7 @@ tr:not(.sub-row) + .sub-row td {
     color: #495057;
 }
 
-/* Infrastructure Weekend styling for Monday entries */
+/* Infrastructure Weekend styling for Friday entries */
 .infra-week-label {
     display: block;
     background-color: #ff6b35;

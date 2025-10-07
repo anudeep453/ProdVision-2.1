@@ -3872,22 +3872,22 @@ function addCombinedItemCard(isXva = false, initialData = null) {
     const timeLossInput = document.createElement('input');
     timeLossInput.type = 'text';
     timeLossInput.className = 'time-loss';
-    timeLossInput.placeholder = 'e.g., 15 min, 2 hours, 1hr 30min';
-    timeLossInput.title = 'Enter time duration (e.g., 15 min, 2 hours, 1hr 30min)';
+    timeLossInput.placeholder = 'HH:MM (e.g., 02:30, 1:15)';
+    timeLossInput.title = 'Enter time duration in HH:MM format (hours:minutes)';
+    timeLossInput.maxLength = 5;
     if (initialData && initialData.time_loss) {
         timeLossInput.value = initialData.time_loss;
     }
 
-    // Add input validation for timing format
+    // Add input validation for HH:MM format only
     timeLossInput.addEventListener('input', function() {
         const value = this.value.trim();
         if (value) {
-            // Enhanced regex to handle complex time formats like "1 hour 30 minutes" or "2hrs 15min"
-            const timePattern = /^(\d+\s*(hour|hours|hr|hrs|h)\s*)?(\d+\s*(min|mins|minute|minutes|m))?\s*$/i;
-            const simplePattern = /^\d+\s*(min|mins|minute|minutes|hour|hours|hr|hrs|h|m)\s*$/i;
+            // Strict regex for HH:MM format (accepts H:MM or HH:MM)
+            const timePattern = /^([0-9]|[0-1][0-9]|2[0-3]):([0-5][0-9])$/;
             
-            if (!timePattern.test(value) && !simplePattern.test(value)) {
-                this.setCustomValidity('Please enter time duration (e.g., 15 min, 2 hours, 1hr 30min)');
+            if (!timePattern.test(value)) {
+                this.setCustomValidity('Please enter time in HH:MM format (e.g., 02:30, 1:15)');
                 this.style.borderColor = '#dc3545';
             } else {
                 this.setCustomValidity('');
@@ -3896,6 +3896,32 @@ function addCombinedItemCard(isXva = false, initialData = null) {
         } else {
             this.setCustomValidity('');
             this.style.borderColor = '';
+        }
+    });
+
+    // Add input formatting to help user type the colon automatically
+    timeLossInput.addEventListener('keydown', function(e) {
+        const value = this.value;
+        const key = e.key;
+        
+        // Allow backspace, delete, tab, escape, enter
+        if ([8, 9, 27, 13, 46].indexOf(e.keyCode) !== -1 ||
+            // Allow Ctrl+A, Ctrl+C, Ctrl+V, Ctrl+X
+            (e.keyCode === 65 && e.ctrlKey === true) ||
+            (e.keyCode === 67 && e.ctrlKey === true) ||
+            (e.keyCode === 86 && e.ctrlKey === true) ||
+            (e.keyCode === 88 && e.ctrlKey === true)) {
+            return;
+        }
+        
+        // Only allow numbers and colon
+        if ((e.keyCode < 48 || e.keyCode > 57) && e.keyCode !== 186 && e.keyCode !== 58) {
+            e.preventDefault();
+        }
+        
+        // Auto-add colon after 2 digits if not present
+        if (value.length === 2 && key >= '0' && key <= '9' && value.indexOf(':') === -1) {
+            this.value = value + ':';
         }
     });
 
@@ -6091,42 +6117,42 @@ function formatMonthLabel(monthKey) {
     return date.toLocaleDateString('en-US', { year: 'numeric', month: 'long' });
 }
 
-// Infrastructure Weekend Monday Detection
-function isThirdMondayOfMonth(dateString) {
+// Infrastructure Weekend Friday Detection
+function isThirdFridayOfMonth(dateString) {
     const date = new Date(dateString);
     
-    // Check if it's a Monday
-    if (date.getDay() !== 1) {
+    // Check if it's a Friday
+    if (date.getDay() !== 5) {
         return false;
     }
     
     const year = date.getFullYear();
     const month = date.getMonth();
     
-    // Find all Mondays in the month
-    const mondays = [];
+    // Find all Fridays in the month
+    const fridays = [];
     const firstDay = new Date(year, month, 1);
     const lastDay = new Date(year, month + 1, 0);
     
-    // Find the first Monday of the month
-    const firstMonday = new Date(firstDay);
-    const daysToMonday = (1 - firstDay.getDay() + 7) % 7;
-    firstMonday.setDate(firstDay.getDate() + daysToMonday);
+    // Find the first Friday of the month
+    const firstFriday = new Date(firstDay);
+    const daysToFriday = (5 - firstDay.getDay() + 7) % 7;
+    firstFriday.setDate(firstDay.getDate() + daysToFriday);
     
-    // Collect all Mondays in the month
-    const currentMonday = new Date(firstMonday);
-    while (currentMonday.getMonth() === month) {
-        mondays.push(currentMonday.getDate());
-        currentMonday.setDate(currentMonday.getDate() + 7);
+    // Collect all Fridays in the month
+    const currentFriday = new Date(firstFriday);
+    while (currentFriday.getMonth() === month) {
+        fridays.push(currentFriday.getDate());
+        currentFriday.setDate(currentFriday.getDate() + 7);
     }
     
-    // Check if the given date is the 3rd Monday (index 2)
-    return mondays.length >= 3 && date.getDate() === mondays[2];
+    // Check if the given date is the 3rd Friday (index 2)
+    return fridays.length >= 3 && date.getDate() === fridays[2];
 }
 
-function isMonday(dateString) {
+function isFriday(dateString) {
     const date = new Date(dateString);
-    return date.getDay() === 1;
+    return date.getDay() === 5;
 }
 
 function shouldShowInfraWeek(dateString, manualFlag) {
@@ -6134,14 +6160,14 @@ function shouldShowInfraWeek(dateString, manualFlag) {
     if (manualFlag === 1) return true;
     if (manualFlag === 0) return false;
     
-    // Auto-detect: show if it's the 3rd Monday of the month
-    return isMonday(dateString) && isThirdMondayOfMonth(dateString);
+    // Auto-detect: show if it's the 3rd Friday of the month
+    return isFriday(dateString) && isThirdFridayOfMonth(dateString);
 }
 
 // Time-based color logic
 function getTimeBasedColor(timeText, dateString, application, fieldType) {
     const date = new Date(dateString);
-    const isMonday = date.getDay() === 1;
+    const isFridayDate = date.getDay() === 5;
     
     // Parse time from text (format: "HH:MM AM/PM" or "HH:MM")
     const timeMatch = timeText.match(/(\d{1,2}):(\d{2})\s*(AM|PM|am|pm)?/i);
@@ -6172,19 +6198,19 @@ function getTimeBasedColor(timeText, dateString, application, fieldType) {
     
     const timeInMinutes = hour * 60 + minute;
     
-    // Special Monday logic (simplified - no weekend infrastructure logic)
-    if (isMonday) {
-        // PRC Mail on Monday: Always Green
+    // Special Friday logic (simplified - no weekend infrastructure logic)
+    if (isFridayDate) {
+        // PRC Mail on Friday: Always Green
         if (fieldType === 'prc_mail') {
             return 'Green';
         }
-        // CP Alerts on Monday: Always follow normal time-based rules
+        // CP Alerts on Friday: Always follow normal time-based rules
         else if (fieldType === 'cp_alerts') {
             return getTimeBasedColorForApplication(timeInMinutes, application);
         }
     }
     
-    // Non-Monday or other field types: Follow normal time-based rules
+    // Non-Friday or other field types: Follow normal time-based rules
     return getTimeBasedColorForApplication(timeInMinutes, application);
 }
 
@@ -6254,8 +6280,8 @@ function getDayOfWeek(dateString, infraWeekendManual = null) {
     
     const dayName = shortDayNames[dayOfWeek];
     
-    // Check if we should show "Infra Week" for Monday entries
-    if (dayOfWeek === 1 && shouldShowInfraWeek(dateString, infraWeekendManual)) {
+    // Check if we should show "Infra Week" for Friday entries
+    if (dayOfWeek === 5 && shouldShowInfraWeek(dateString, infraWeekendManual)) {
         return `${dayName}<br><small class="infra-week-label">Infra Week</small>`;
     }
     
@@ -6344,13 +6370,16 @@ function handleDateChangeForInfraWeekend(dateValue, checkbox, group) {
         return;
     }
     
-    // Show checkbox only for Monday entries
-    if (isMonday(dateValue)) {
+    // Show checkbox only for Friday entries
+    if (isFriday(dateValue)) {
         group.style.display = 'block';
         
-        // Auto-check if it's the 3rd Monday and not manually set
-        if (isThirdMondayOfMonth(dateValue) && !checkbox.hasAttribute('data-manually-set')) {
+        // Auto-check only if it's the 3rd Friday and not manually set
+        if (isThirdFridayOfMonth(dateValue) && !checkbox.hasAttribute('data-manually-set')) {
             checkbox.checked = true;
+        } else if (!checkbox.hasAttribute('data-manually-set')) {
+            // For other Fridays, leave unchecked by default
+            checkbox.checked = false;
         }
     } else {
         group.style.display = 'none';
