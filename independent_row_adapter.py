@@ -460,9 +460,34 @@ class IndependentRowSQLiteAdapter:
                 # Also include main rows that have actual issue data
                 query += " AND (row_type = 'issue' OR (row_type = 'main' AND issue_description IS NOT NULL AND issue_description != ''))"
             elif row_type_filter == 'time_loss':
-                # Improved time loss filter: check for meaningful time loss values (not just empty/null)
-                # Look for actual time loss values that are not empty strings, null, 'N/A', or just whitespace
-                query += " AND (time_loss IS NOT NULL AND TRIM(time_loss) != '' AND TRIM(UPPER(time_loss)) NOT IN ('N/A', 'NA', 'NONE', 'NULL'))"
+                # FIX FOR DUPLICATION ISSUE:
+                # Time loss data can be stored in both main rows and issue rows.
+                # When both exist for the same entry, we get duplicates in filtered results.
+                # Solution: Prioritize issue rows over main rows to prevent duplicates.
+                # Only show main rows with time loss if they don't have associated issue rows with time loss.
+                query += """ AND (
+                    (
+                        row_type = 'issue' 
+                        AND time_loss IS NOT NULL 
+                        AND TRIM(time_loss) != '' 
+                        AND TRIM(UPPER(time_loss)) NOT IN ('N/A', 'NA', 'NONE', 'NULL')
+                    )
+                    OR 
+                    (
+                        row_type = 'main' 
+                        AND time_loss IS NOT NULL 
+                        AND TRIM(time_loss) != '' 
+                        AND TRIM(UPPER(time_loss)) NOT IN ('N/A', 'NA', 'NONE', 'NULL')
+                        AND NOT EXISTS (
+                            SELECT 1 FROM entries e2 
+                            WHERE e2.grouping_key = entries.grouping_key 
+                            AND e2.row_type = 'issue' 
+                            AND e2.time_loss IS NOT NULL 
+                            AND TRIM(e2.time_loss) != '' 
+                            AND TRIM(UPPER(e2.time_loss)) NOT IN ('N/A', 'NA', 'NONE', 'NULL')
+                        )
+                    )
+                )"""
         
         query += " ORDER BY date DESC, grouping_key, row_position"
         
