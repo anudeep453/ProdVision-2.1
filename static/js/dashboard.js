@@ -2225,13 +2225,19 @@ function createEntryRow(entry, isFirstRow, itemType, entryId, childCount) {
     
     if (isFirstRow) {
         // First row shows items normally
-        issuesDisplay = issues.length ? issues.filter(i => i !== null).map(i => `<div class="issue-list-item">${escapeHtml(i.description)}</div>`).join('') : (entry.issue_description ? escapeHtml(entry.issue_description) : 'N/A');
+        issuesDisplay = issues.length ? issues.filter(i => i !== null).map(i => {
+            const desc = i.description && i.description.trim() ? i.description.trim() : '';
+            return desc ? `<div class="issue-list-item">${escapeHtml(desc)}</div>` : '';
+        }).filter(html => html).join('') || 'N/A' : (entry.issue_description ? escapeHtml(entry.issue_description) : 'N/A');
         prbDisplay = prbIdBadge;
         hiimDisplay = hiimIdBadge;
     } else {
         // For issue sub-rows, also show its related PRBs/HIIMs in the same row
         if (itemType === 'issue') {
-            issuesDisplay = issues.length ? issues.filter(i => i !== null).map(i => `<div class="issue-list-item">${escapeHtml(i.description)}</div>`).join('') : (entry.issue_description ? escapeHtml(entry.issue_description) : '');
+            issuesDisplay = issues.length ? issues.filter(i => i !== null).map(i => {
+                const desc = i.description && i.description.trim() ? i.description.trim() : '';
+                return desc ? `<div class="issue-list-item">${escapeHtml(desc)}</div>` : '';
+            }).filter(html => html).join('') || '' : (entry.issue_description ? escapeHtml(entry.issue_description) : '');
             prbDisplay = prbIdBadge;
             hiimDisplay = hiimIdBadge;
         } else if (itemType === 'prb') {
@@ -3875,13 +3881,48 @@ function addCombinedItemCard(isXva = false, initialData = null) {
     timeLossInput.placeholder = 'HH:MM (e.g., 02:30, 1:15)';
     timeLossInput.title = 'Enter time duration in HH:MM format (hours:minutes)';
     timeLossInput.maxLength = 5;
+    
+    // Set default value to "N/A" if no initial data
     if (initialData && initialData.time_loss) {
         timeLossInput.value = initialData.time_loss;
+    } else {
+        timeLossInput.value = 'N/A';
+        timeLossInput.style.color = '#999'; // Gray color to indicate placeholder-like state
     }
+
+    // Add focus event handler to clear N/A when user starts typing
+    timeLossInput.addEventListener('focus', function() {
+        if (this.value === 'N/A') {
+            this.value = '';
+            this.style.color = ''; // Reset to normal color
+        }
+    });
+
+    // Add blur event handler to restore N/A if field is empty
+    timeLossInput.addEventListener('blur', function() {
+        if (this.value.trim() === '') {
+            this.value = 'N/A';
+            this.style.color = '#999'; // Gray color to indicate placeholder-like state
+            this.setCustomValidity(''); // Clear any validation errors
+            this.style.borderColor = ''; // Clear any error styling
+        }
+    });
 
     // Add input validation for HH:MM format only
     timeLossInput.addEventListener('input', function() {
         const value = this.value.trim();
+        
+        // Skip validation for N/A
+        if (value === 'N/A') {
+            this.setCustomValidity('');
+            this.style.borderColor = '';
+            this.style.color = '#999'; // Keep gray color for N/A
+            return;
+        }
+        
+        // Reset color to normal for user input
+        this.style.color = '';
+        
         if (value) {
             // Strict regex for HH:MM format (accepts H:MM or HH:MM)
             const timePattern = /^([0-9]|[0-1][0-9]|2[0-3]):([0-5][0-9])$/;
@@ -3904,6 +3945,12 @@ function addCombinedItemCard(isXva = false, initialData = null) {
         const value = this.value;
         const key = e.key;
         
+        // If the field contains "N/A" and user starts typing, clear it first
+        if (value === 'N/A' && key.length === 1 && /[0-9]/.test(key)) {
+            this.value = '';
+            this.style.color = ''; // Reset to normal color
+        }
+        
         // Allow backspace, delete, tab, escape, enter
         if ([8, 9, 27, 13, 46].indexOf(e.keyCode) !== -1 ||
             // Allow Ctrl+A, Ctrl+C, Ctrl+V, Ctrl+X
@@ -3914,14 +3961,20 @@ function addCombinedItemCard(isXva = false, initialData = null) {
             return;
         }
         
+        // Skip further processing if field contains N/A (unless user is typing numbers)
+        if (value === 'N/A' && !/[0-9]/.test(key)) {
+            return;
+        }
+        
         // Only allow numbers and colon
         if ((e.keyCode < 48 || e.keyCode > 57) && e.keyCode !== 186 && e.keyCode !== 58) {
             e.preventDefault();
         }
         
         // Auto-add colon after 2 digits if not present
-        if (value.length === 2 && key >= '0' && key <= '9' && value.indexOf(':') === -1) {
-            this.value = value + ':';
+        const currentValue = value === 'N/A' ? '' : value;
+        if (currentValue.length === 2 && key >= '0' && key <= '9' && currentValue.indexOf(':') === -1) {
+            this.value = currentValue + ':';
         }
     });
 
@@ -4108,14 +4161,21 @@ function serializeIssuesFor(isXva = false) {
         cards.forEach(card => {
             const textarea = card.querySelector('.issue-description');
             const timeLossInput = card.querySelector('.time-loss');
-            if (textarea && textarea.value.trim()) {
-                const issueObj = { description: textarea.value.trim() };
-                if (timeLossInput && timeLossInput.value.trim()) {
-                    issueObj.time_loss = timeLossInput.value.trim();
+            
+            const description = textarea && textarea.value.trim() ? textarea.value.trim() : '';
+            const timeLoss = timeLossInput && timeLossInput.value.trim() && timeLossInput.value.trim() !== 'N/A' ? timeLossInput.value.trim() : '';
+            
+            // Create issue object if there's either a description or time_loss value
+            if (description || timeLoss) {
+                const issueObj = {
+                    description: description || '',  // Always include description field, even if empty
+                };
+                if (timeLoss) {
+                    issueObj.time_loss = timeLoss;
                 }
                 issues.push(issueObj);
             } else {
-                issues.push(null); // Maintain positional alignment
+                issues.push(null); // Maintain positional alignment for completely empty item sets
             }
         });
     }
@@ -4143,7 +4203,9 @@ function serializeTimeLossFor(isXva = false) {
         const cards = combinedContainer.querySelectorAll('.combined-item-card');
         cards.forEach(card => {
             const input = card.querySelector('.time-loss');
-            values.push(input && input.value.trim() ? input.value.trim() : null);
+            const value = input && input.value.trim() ? input.value.trim() : null;
+            // Treat "N/A" as null for backward compatibility
+            values.push(value === 'N/A' ? null : value);
         });
     }
     return values;
@@ -4405,9 +4467,7 @@ async function handleCVAREntrySubmit(event) {
         entryData.issues = issuesArray;
         // Clear legacy single field to avoid duplication on server if you prefer; otherwise server migrates first item.
         entryData.issue_description = '';
-        // Derive top-level time_loss from first issue that has one
-        const firstWithTimeLoss = issuesArray.find(i => i && i.time_loss);
-        if (firstWithTimeLoss) entryData.time_loss = firstWithTimeLoss.time_loss;
+        // Do NOT set top-level time_loss - each issue should have its own time_loss value
     }
 
     const prbsArray = serializePrbs(false);
@@ -4507,6 +4567,7 @@ async function handleXVAEntrySubmit(event) {
         hiim_id_status: formData.get('hiim_id_status'),
         hiim_link: formData.get('hiim_link'),
         remarks: formData.get('remarks'),
+        time_loss: '',  // Initialize as empty - will be set per-issue if needed
         // Infrastructure weekend manual flag (null = auto-detect, 0 = manually unchecked, 1 = manually checked)
         infra_weekend_manual: (() => {
             const checkbox = document.getElementById('xva-entry-infra-weekend');
@@ -4557,8 +4618,7 @@ async function handleXVAEntrySubmit(event) {
     if (xvaIssues.length) {
         entryData.issues = xvaIssues;
         entryData.issue_description = '';
-        const firstWithTimeLoss = xvaIssues.find(i => i && i.time_loss);
-        if (firstWithTimeLoss) entryData.time_loss = firstWithTimeLoss.time_loss;
+        // Do NOT set top-level time_loss - each issue should have its own time_loss value
     }
     
     // removed constructed entry data log

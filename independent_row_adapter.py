@@ -183,7 +183,7 @@ class IndependentRowSQLiteAdapter:
             application_name = entry_data.get('application_name', '')
             grouping_key = self.generate_grouping_key(date, application_name)
             
-            # Common data to be duplicated across all rows
+            # Common data to be duplicated across all rows (excluding time_loss which is item-specific)
             common_data = {
                 'date': date,
                 'day': entry_data.get('day', ''),
@@ -222,7 +222,7 @@ class IndependentRowSQLiteAdapter:
                 'quality_issue': entry_data.get('quality_issue', ''),
                 'others_prb': entry_data.get('others_prb', ''),
                 'others_hiim': entry_data.get('others_hiim', ''),
-                'time_loss': entry_data.get('time_loss', ''),
+                # time_loss removed from common_data - it should be specific to each issue
                 'infra_weekend_manual': entry_data.get('infra_weekend_manual'),
                 'created_at': now,
                 'updated_at': now
@@ -255,6 +255,7 @@ class IndependentRowSQLiteAdapter:
                 'hiim_id_status': main_hiim_status,
                 'hiim_link': main_hiim_link,
                 'issue_description': main_issue_desc,
+                'time_loss': entry_data.get('time_loss', '') if not issues_array else '',  # Only use legacy time_loss if no issues array
             }
             
             entry_id = self._insert_row(cursor, main_entry)
@@ -280,6 +281,7 @@ class IndependentRowSQLiteAdapter:
                     'hiim_id_status': '',
                     'hiim_link': '',
                     'issue_description': '',
+                    'time_loss': '',  # PRBs don't have time_loss
                 }
                 
                 entry_id = self._insert_row(cursor, prb_entry)
@@ -304,6 +306,7 @@ class IndependentRowSQLiteAdapter:
                     'prb_id_status': '',
                     'prb_link': '',
                     'issue_description': '',
+                    'time_loss': '',  # HIIMs don't have time_loss
                 }
                 
                 entry_id = self._insert_row(cursor, hiim_entry)
@@ -321,8 +324,8 @@ class IndependentRowSQLiteAdapter:
                     'row_type': 'issue',
                     'row_position': item_set_position,  # This represents Item Set number (0, 1, 2, etc.)
                     'issue_description': issue.get('description', ''),
-                    # Allow per-item time loss so each issue row can have its own value (fallback to common if not provided)
-                    'time_loss': issue.get('time_loss', common_data.get('time_loss', '')),
+                    # Use only the issue's own time_loss value, no fallback to common data
+                    'time_loss': issue.get('time_loss', ''),
                     # Clear other type-specific fields for independence
                     'prb_id_number': '',
                     'prb_id_status': '',
@@ -666,11 +669,21 @@ class IndependentRowSQLiteAdapter:
         elif row_type == 'issue':
             fields_map = {
                 'issue_description': item_data.get('description', item_data.get('issue_description')),
-                'time_loss': item_data.get('time_loss', item_data.get('time_loss'))
+                'time_loss': item_data.get('time_loss', '')
             }
         
         for field, value in fields_map.items():
-            if value is not None:
+            # Only update fields that have meaningful values
+            # For time_loss, treat None, empty string, or whitespace-only as no value
+            if field == 'time_loss':
+                if value is not None and str(value).strip():
+                    update_fields.append(f"{field} = ?")
+                    update_values.append(str(value).strip())
+                elif value == '':
+                    # Explicitly set empty time_loss to empty string (clear existing value)
+                    update_fields.append(f"{field} = ?")
+                    update_values.append('')
+            elif value is not None and str(value).strip():
                 update_fields.append(f"{field} = ?")
                 update_values.append(value)
         
@@ -739,9 +752,14 @@ class IndependentRowSQLiteAdapter:
                 'hiim_link': item_data.get('hiim_link')
             })
         elif row_type == 'issue':
+            # Handle time_loss properly - only set if there's a meaningful value
+            time_loss_value = item_data.get('time_loss', '')
+            if time_loss_value is None:
+                time_loss_value = ''
+            
             new_row_data.update({
                 'issue_description': item_data.get('description', item_data.get('issue_description')),
-                'time_loss': item_data.get('time_loss', '')
+                'time_loss': str(time_loss_value).strip()
             })
         
         # Insert the new row

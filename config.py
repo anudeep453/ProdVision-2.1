@@ -7,7 +7,7 @@ Production configuration for the ProdVision SQLite application
 SECRET_KEY = 'prod-secret-key-change-in-production'  # Change this in production!
 DEBUG = False  # Set to False for production
 HOST = '0.0.0.0'  # Allow external connections for server
-PORT = 7077
+PORT = 7070
 
 # Instructions:
 # 1. The application uses individual SQLite databases for each application (CVAR ALL, CVAR NYQ, XVA, REG, OTHERS)
