@@ -239,9 +239,13 @@ class IndependentRowSQLiteAdapter:
             main_prb_id = entry_data.get('prb_id_number', '') if not prbs_array else ''
             main_prb_status = entry_data.get('prb_id_status', '') if not prbs_array else ''
             main_prb_link = entry_data.get('prb_link', '') if not prbs_array else ''
+            if not main_prb_link and main_prb_id:
+                main_prb_link = f"https://unity.itsm.socgen/saw/Problem/{main_prb_id}/general"
             main_hiim_id = entry_data.get('hiim_id_number', '') if not hiims_array else ''
             main_hiim_status = entry_data.get('hiim_id_status', '') if not hiims_array else ''
             main_hiim_link = entry_data.get('hiim_link', '') if not hiims_array else ''
+            if not main_hiim_link and main_hiim_id:
+                main_hiim_link = f"https://unity.itsm.socgen/saw/custom/HighImpactIncident_c/details/{main_hiim_id}/general"
             main_issue_desc = entry_data.get('issue_description', '') if not issues_array else ''
             
             main_entry = {
@@ -269,13 +273,17 @@ class IndependentRowSQLiteAdapter:
                     # Skip None placeholders during creation
                     continue
                     
+                prb_id = str(prb.get('prb_id_number', '')) if prb.get('prb_id_number') is not None else ''
+                prb_link = prb.get('prb_link', '')
+                if not prb_link and prb_id:
+                    prb_link = f"https://unity.itsm.socgen/saw/Problem/{prb_id}/general"
                 prb_entry = {
                     **common_data,
                     'row_type': 'prb',
                     'row_position': item_set_position,  # This represents Item Set number (0, 1, 2, etc.)
-                    'prb_id_number': str(prb.get('prb_id_number', '')) if prb.get('prb_id_number') is not None else '',
+                    'prb_id_number': prb_id,
                     'prb_id_status': prb.get('prb_id_status', ''),
-                    'prb_link': prb.get('prb_link', ''),
+                    'prb_link': prb_link,
                     # Clear other type-specific fields for independence
                     'hiim_id_number': '',
                     'hiim_id_status': '',
@@ -283,7 +291,6 @@ class IndependentRowSQLiteAdapter:
                     'issue_description': '',
                     'time_loss': '',  # PRBs don't have time_loss
                 }
-                
                 entry_id = self._insert_row(cursor, prb_entry)
                 prb_entry['id'] = entry_id
                 created_entries.append(prb_entry)
@@ -294,13 +301,17 @@ class IndependentRowSQLiteAdapter:
                     # Skip None placeholders during creation
                     continue
                     
+                hiim_id = str(hiim.get('hiim_id_number', '')) if hiim.get('hiim_id_number') is not None else ''
+                hiim_link = hiim.get('hiim_link', '')
+                if not hiim_link and hiim_id:
+                    hiim_link = f"https://unity.itsm.socgen/saw/custom/HighImpactIncident_c/details/{hiim_id}/general"
                 hiim_entry = {
                     **common_data,
                     'row_type': 'hiim',
                     'row_position': item_set_position,  # This represents Item Set number (0, 1, 2, etc.)
-                    'hiim_id_number': str(hiim.get('hiim_id_number', '')) if hiim.get('hiim_id_number') is not None else '',
+                    'hiim_id_number': hiim_id,
                     'hiim_id_status': hiim.get('hiim_id_status', ''),
-                    'hiim_link': hiim.get('hiim_link', ''),
+                    'hiim_link': hiim_link,
                     # Clear other type-specific fields for independence
                     'prb_id_number': '',
                     'prb_id_status': '',
@@ -308,7 +319,6 @@ class IndependentRowSQLiteAdapter:
                     'issue_description': '',
                     'time_loss': '',  # HIIMs don't have time_loss
                 }
-                
                 entry_id = self._insert_row(cursor, hiim_entry)
                 hiim_entry['id'] = entry_id
                 created_entries.append(hiim_entry)

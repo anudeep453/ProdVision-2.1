@@ -114,7 +114,8 @@ const filters = {
     application: 'CVAR ALL', // Default to CVAR ALL
     prbOnly: document.getElementById('prb-only'),
     hiimOnly: document.getElementById('hiim-only'),
-    timeLossOnly: document.getElementById('time-loss-only')
+    timeLossOnly: document.getElementById('time-loss-only'),
+    nonInfraOnly: document.getElementById('non-infra-only')
 };
 
 // Search elements
@@ -1353,6 +1354,7 @@ function buildQueryString() {
     if (filters.prbOnly.checked) params.append('prb_only', 'true');
     if (filters.hiimOnly.checked) params.append('hiim_only', 'true');
     if (filters.timeLossOnly.checked) params.append('time_loss_only', 'true');
+    if (filters.nonInfraOnly && filters.nonInfraOnly.checked) params.append('non_infra_only', 'true');
     
     return params.toString();
 }
@@ -1519,17 +1521,27 @@ async function calculateMonthEndCounts(month, year) {
 
 function displayEntries(entries) {
     entriesTbody.innerHTML = '';
-    
+
+    // Non-Infra filter: filter out entries where infra_weekend_manual === 1
+    let filteredEntries = entries;
+    if (filters.nonInfraOnly && filters.nonInfraOnly.checked) {
+        filteredEntries = entries.filter(e => {
+            // Exclude if infra_weekend_manual is 1 (true/checked)
+            // Accept 1 (int), '1' (string), or true
+            return !(e.infra_weekend_manual === 1 || e.infra_weekend_manual === '1' || e.infra_weekend_manual === true);
+        });
+    }
+
     // Show/hide count displays based on filters
     const countDisplaysContainer = document.getElementById('count-displays-container');
     const prbCountDisplay = document.getElementById('prb-count-display');
     const hiimCountDisplay = document.getElementById('hiim-count-display');
-    
+
     let shouldShowCounts = false;
-    
+
     // Show PRB counts if PRB Only filter is checked
-    if (filters.prbOnly.checked && entries.length > 0) {
-        const prbCounts = calculatePrbCounts(entries);
+    if (filters.prbOnly.checked && filteredEntries.length > 0) {
+        const prbCounts = calculatePrbCounts(filteredEntries);
         document.getElementById('prb-total-count').textContent = prbCounts.total;
         document.getElementById('prb-active-count').textContent = prbCounts.active;
         document.getElementById('prb-closed-count').textContent = prbCounts.closed;
@@ -1538,10 +1550,10 @@ function displayEntries(entries) {
     } else {
         prbCountDisplay.style.display = 'none';
     }
-    
+
     // Show HIIM counts if HIIM Only filter is checked
-    if (filters.hiimOnly.checked && entries.length > 0) {
-        const hiimCounts = calculateHiimCounts(entries);
+    if (filters.hiimOnly.checked && filteredEntries.length > 0) {
+        const hiimCounts = calculateHiimCounts(filteredEntries);
         document.getElementById('hiim-total-count').textContent = hiimCounts.total;
         document.getElementById('hiim-active-count').textContent = hiimCounts.active;
         document.getElementById('hiim-closed-count').textContent = hiimCounts.closed;
@@ -1550,11 +1562,11 @@ function displayEntries(entries) {
     } else {
         hiimCountDisplay.style.display = 'none';
     }
-    
+
     // Show container if any counts should be displayed
     countDisplaysContainer.style.display = shouldShowCounts ? 'flex' : 'none';
-    
-    if (entries.length === 0) {
+
+    if (filteredEntries.length === 0) {
         const visibleColumns = getVisibleColumnsForApplication(filters.application);
         const colspan = visibleColumns.length;
         entriesTbody.innerHTML = `<tr><td colspan="${colspan}" class="text-center">No entries found</td></tr>`;
@@ -1566,21 +1578,21 @@ function displayEntries(entries) {
     const activeRowFilters = [filters.prbOnly.checked, filters.hiimOnly.checked, filters.timeLossOnly.checked].filter(Boolean).length;
     const isRowLevelFiltering = activeRowFilters === 1; // single filter (PRB, HIIM, or Time Loss)
     const forceExpandedMultiFilter = activeRowFilters > 1; // multi-filter AND mode
-    
+
     if (isRowLevelFiltering) {
         // Row-level filtering: Display each entry as an individual row without grouping/expansion
-        displayIndividualRows(entries);
+        displayIndividualRows(filteredEntries);
     } else if (forceExpandedMultiFilter) {
         // Multi-filter AND mode: show only item-set rows that satisfy ALL selected filters (PRB+HIIM etc.)
-        displayGroupedEntries(entries, { forceExpanded: true, multiFilter: true });
+        displayGroupedEntries(filteredEntries, { forceExpanded: true, multiFilter: true });
     } else {
         // Normal display: Group entries by week and expand multi-item entries
-        displayGroupedEntries(entries, { forceExpanded: false, multiFilter: false });
+        displayGroupedEntries(filteredEntries, { forceExpanded: false, multiFilter: false });
     }
-    
+
     // Apply column visibility based on current application
     toggleColumnsForApplication(filters.application);
-    
+
     // Authentication state is now handled by CSS classes
 }
 
@@ -4859,13 +4871,14 @@ function clearFilters() {
     filters.prbOnly.checked = false;
     filters.hiimOnly.checked = false;
     filters.timeLossOnly.checked = false;
-    
+    if (filters.nonInfraOnly) filters.nonInfraOnly.checked = false;
+
     // Reset application to CVAR ALL
     filters.application = 'CVAR ALL';
     document.querySelectorAll('.header-app-btn, .filter-app-btn').forEach(btn => btn.classList.remove('active'));
     const activeBtn = document.querySelector('.header-app-btn[data-app="CVAR ALL"]') || document.querySelector('.filter-app-btn[data-app="CVAR ALL"]');
     if (activeBtn) activeBtn.classList.add('active');
-    
+
     loadData();
 }
 
