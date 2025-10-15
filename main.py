@@ -409,11 +409,61 @@ def get_entries():
 
         # Retrieval strategy
         if use_row_level_filtering:
-            # Single filter -> independent row fetching
+            # Single filter -> get individual rows filtered by the specific type, but enrich with complete data
             if application:
-                all_entries = entry_manager.get_individual_rows_by_application(application, start_date, end_date, row_type_filter)
+                # Get individual rows filtered by the specific row type (PRB, HIIM, or Time Loss)
+                filtered_rows = entry_manager.get_individual_rows_by_application(application, start_date, end_date, row_type_filter)
+                # Also get all rows for the same date/application to enrich the filtered rows
+                all_rows = entry_manager.get_individual_rows_by_application(application, start_date, end_date)
             else:
-                all_entries = entry_manager.get_all_individual_rows(row_type_filter)
+                filtered_rows = entry_manager.get_all_individual_rows(row_type_filter)
+                all_rows = entry_manager.get_all_individual_rows()
+            
+            # Group all rows by date and application for enrichment
+            grouped_rows = {}
+            for row in all_rows:
+                key = f"{row.get('date')}_{row.get('application_name')}"
+                if key not in grouped_rows:
+                    grouped_rows[key] = []
+                grouped_rows[key].append(row)
+            
+            # Enrich each filtered row with data from other rows in the same group
+            enriched_entries = []
+            for filtered_row in filtered_rows:
+                key = f"{filtered_row.get('date')}_{filtered_row.get('application_name')}"
+                enriched_row = filtered_row.copy()
+                
+                # Add data from other rows in the same group
+                if key in grouped_rows:
+                    for other_row in grouped_rows[key]:
+                        # Add PRB data if not present
+                        if not enriched_row.get('prb_id_number') and other_row.get('prb_id_number'):
+                            enriched_row['prb_id_number'] = other_row.get('prb_id_number')
+                            enriched_row['prb_id_status'] = other_row.get('prb_id_status', '')
+                            enriched_row['prb_link'] = other_row.get('prb_link', '')
+                        
+                        # Add HIIM data if not present
+                        if not enriched_row.get('hiim_id_number') and other_row.get('hiim_id_number'):
+                            enriched_row['hiim_id_number'] = other_row.get('hiim_id_number')
+                            enriched_row['hiim_id_status'] = other_row.get('hiim_id_status', '')
+                            enriched_row['hiim_link'] = other_row.get('hiim_link', '')
+                        
+                        # Add Time Loss data if not present
+                        if not enriched_row.get('time_loss') and other_row.get('time_loss'):
+                            enriched_row['time_loss'] = other_row.get('time_loss')
+                        
+                        # Add Issue data if not present
+                        if not enriched_row.get('issue_description') and other_row.get('issue_description'):
+                            enriched_row['issue_description'] = other_row.get('issue_description')
+                        
+                        # Add other common fields if not present
+                        for field in ['prc_mail_text', 'prc_mail_status', 'quality_status', 'remarks', 'day']:
+                            if not enriched_row.get(field) and other_row.get(field):
+                                enriched_row[field] = other_row.get(field)
+                
+                enriched_entries.append(enriched_row)
+            
+            all_entries = enriched_entries
         else:
             # Grouped mode (no row-level filters or multi-filter AND mode)
             if application:
@@ -421,6 +471,31 @@ def get_entries():
             else:
                 all_entries = entry_manager.get_all_entries()
         
+        # Helper functions for filtering
+        def has_prb(ent):
+            if ent.get('prb_id_number'):
+                return True
+            prbs = ent.get('prbs') or []
+            return any(p and (p.get('prb_id_number') or p.get('prb_id')) for p in prbs)
+
+        def has_hiim(ent):
+            if ent.get('hiim_id_number'):
+                return True
+            hiims = ent.get('hiims') or []
+            return any(h and (h.get('hiim_id_number') or h.get('hiim_id')) for h in hiims)
+
+        def has_time_loss(ent):
+            # Check top-level time_loss field for meaningful values
+            top_level_time_loss = ent.get('time_loss', '').strip()
+            if top_level_time_loss and top_level_time_loss.upper() not in ['N/A', 'NA', 'NONE', 'NULL']:
+                return True
+            
+            # Check issues array for meaningful time_loss values
+            issues = ent.get('issues') or []
+            return any(i and i.get('time_loss', '').strip() and 
+                      i.get('time_loss', '').strip().upper() not in ['N/A', 'NA', 'NONE', 'NULL'] 
+                      for i in issues)
+
         # Apply remaining filters (non-date, non-application filters)
         filtered_entries = []
         for entry in all_entries:
@@ -446,36 +521,20 @@ def get_entries():
                 if entry.get('quality_status') != quality_status:
                     continue
             
-            # Row-level single-filter case is already handled by query (row_type_filter) so we accept entry
+            # Row-level single-filter case: apply the specific filter to the complete entry
             if use_row_level_filtering:
+                # Apply the specific single filter to the complete entry
+                if prb_only and not has_prb(entry):
+                    continue
+                if hiim_only and not has_hiim(entry):
+                    continue
+                if time_loss_only and not has_time_loss(entry):
+                    continue
                 filtered_entries.append(entry)
                 continue
 
             # Multi-filter AND logic (or zero filters -> no extra constraints)
-            # Helper checks
-            def has_prb(ent):
-                if ent.get('prb_id_number'):
-                    return True
-                prbs = ent.get('prbs') or []
-                return any(p and (p.get('prb_id_number') or p.get('prb_id')) for p in prbs)
-
-            def has_hiim(ent):
-                if ent.get('hiim_id_number'):
-                    return True
-                hiims = ent.get('hiims') or []
-                return any(h and (h.get('hiim_id_number') or h.get('hiim_id')) for h in hiims)
-
-            def has_time_loss(ent):
-                # Check top-level time_loss field for meaningful values
-                top_level_time_loss = ent.get('time_loss', '').strip()
-                if top_level_time_loss and top_level_time_loss.upper() not in ['N/A', 'NA', 'NONE', 'NULL']:
-                    return True
-                
-                # Check issues array for meaningful time_loss values
-                issues = ent.get('issues') or []
-                return any(i and i.get('time_loss', '').strip() and 
-                          i.get('time_loss', '').strip().upper() not in ['N/A', 'NA', 'NONE', 'NULL'] 
-                          for i in issues)
+            # Helper checks (already defined above)
 
             # Apply AND conditions only for the filters that are active
             # Note: time_loss_only is now handled at row level, so skip entry-level filtering for it

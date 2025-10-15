@@ -81,7 +81,7 @@ class IndependentRowSQLiteAdapter:
                 backlog_item TEXT,
                 
                 -- OTHERS-specific common fields
-                dare TEXT,
+
                 timings TEXT,
                 puntuality_issue TEXT,
                 quality TEXT,
@@ -215,7 +215,7 @@ class IndependentRowSQLiteAdapter:
                 'reg_prb': entry_data.get('reg_prb', ''),
                 'reg_hiim': entry_data.get('reg_hiim', ''),
                 'backlog_item': entry_data.get('backlog_item', ''),
-                'dare': entry_data.get('dare', ''),
+
                 'timings': entry_data.get('timings', ''),
                 'puntuality_issue': entry_data.get('puntuality_issue', ''),
                 'quality': entry_data.get('quality', ''),
@@ -239,9 +239,13 @@ class IndependentRowSQLiteAdapter:
             main_prb_id = entry_data.get('prb_id_number', '') if not prbs_array else ''
             main_prb_status = entry_data.get('prb_id_status', '') if not prbs_array else ''
             main_prb_link = entry_data.get('prb_link', '') if not prbs_array else ''
+            if not main_prb_link and main_prb_id:
+                main_prb_link = f"https://unity.itsm.socgen/saw/Problem/{main_prb_id}/general"
             main_hiim_id = entry_data.get('hiim_id_number', '') if not hiims_array else ''
             main_hiim_status = entry_data.get('hiim_id_status', '') if not hiims_array else ''
             main_hiim_link = entry_data.get('hiim_link', '') if not hiims_array else ''
+            if not main_hiim_link and main_hiim_id:
+                main_hiim_link = f"https://unity.itsm.socgen/saw/custom/HighImpactIncident_c/details/{main_hiim_id}/general"
             main_issue_desc = entry_data.get('issue_description', '') if not issues_array else ''
             
             main_entry = {
@@ -269,13 +273,17 @@ class IndependentRowSQLiteAdapter:
                     # Skip None placeholders during creation
                     continue
                     
+                prb_id = str(prb.get('prb_id_number', '')) if prb.get('prb_id_number') is not None else ''
+                prb_link = prb.get('prb_link', '')
+                if not prb_link and prb_id:
+                    prb_link = f"https://unity.itsm.socgen/saw/Problem/{prb_id}/general"
                 prb_entry = {
                     **common_data,
                     'row_type': 'prb',
                     'row_position': item_set_position,  # This represents Item Set number (0, 1, 2, etc.)
-                    'prb_id_number': str(prb.get('prb_id_number', '')) if prb.get('prb_id_number') is not None else '',
+                    'prb_id_number': prb_id,
                     'prb_id_status': prb.get('prb_id_status', ''),
-                    'prb_link': prb.get('prb_link', ''),
+                    'prb_link': prb_link,
                     # Clear other type-specific fields for independence
                     'hiim_id_number': '',
                     'hiim_id_status': '',
@@ -283,7 +291,6 @@ class IndependentRowSQLiteAdapter:
                     'issue_description': '',
                     'time_loss': '',  # PRBs don't have time_loss
                 }
-                
                 entry_id = self._insert_row(cursor, prb_entry)
                 prb_entry['id'] = entry_id
                 created_entries.append(prb_entry)
@@ -294,13 +301,17 @@ class IndependentRowSQLiteAdapter:
                     # Skip None placeholders during creation
                     continue
                     
+                hiim_id = str(hiim.get('hiim_id_number', '')) if hiim.get('hiim_id_number') is not None else ''
+                hiim_link = hiim.get('hiim_link', '')
+                if not hiim_link and hiim_id:
+                    hiim_link = f"https://unity.itsm.socgen/saw/custom/HighImpactIncident_c/details/{hiim_id}/general"
                 hiim_entry = {
                     **common_data,
                     'row_type': 'hiim',
                     'row_position': item_set_position,  # This represents Item Set number (0, 1, 2, etc.)
-                    'hiim_id_number': str(hiim.get('hiim_id_number', '')) if hiim.get('hiim_id_number') is not None else '',
+                    'hiim_id_number': hiim_id,
                     'hiim_id_status': hiim.get('hiim_id_status', ''),
-                    'hiim_link': hiim.get('hiim_link', ''),
+                    'hiim_link': hiim_link,
                     # Clear other type-specific fields for independence
                     'prb_id_number': '',
                     'prb_id_status': '',
@@ -308,7 +319,6 @@ class IndependentRowSQLiteAdapter:
                     'issue_description': '',
                     'time_loss': '',  # HIIMs don't have time_loss
                 }
-                
                 entry_id = self._insert_row(cursor, hiim_entry)
                 hiim_entry['id'] = entry_id
                 created_entries.append(hiim_entry)
@@ -418,11 +428,67 @@ class IndependentRowSQLiteAdapter:
         result_entries = []
         for grouping_key, group in grouped_entries.items():
             if group['main']:
+                # Standard case: we have a main entry, group everything together
                 main_entry = group['main'].copy()
                 main_entry['prbs'] = group['prbs']
                 main_entry['hiims'] = group['hiims']
                 main_entry['issues'] = group['issues']
                 result_entries.append(main_entry)
+            else:
+                # Special case: no main entry, but we have individual rows
+                # Return each individual row but enrich it with data from other rows in the same grouping
+                all_individual_rows = group['prbs'] + group['hiims']
+                
+                # Add issues as individual entries too
+                for issue in group['issues']:
+                    issue_entry = {
+                        'row_type': 'issue',
+                        'grouping_key': grouping_key,
+                        'issue_description': issue.get('description', ''),
+                        'time_loss': issue.get('time_loss', ''),
+                        'row_position': issue.get('row_position', 0)
+                    }
+                    # Copy common fields from the first available row
+                    if all_individual_rows:
+                        for key in ['application_name', 'date', 'created_at', 'updated_at']:
+                            if key in all_individual_rows[0]:
+                                issue_entry[key] = all_individual_rows[0][key]
+                    all_individual_rows.append(issue_entry)
+                
+                # Enrich each individual row with data from other rows in the same grouping
+                for row in all_individual_rows:
+                    enriched_row = row.copy()
+                    
+                    # Add PRBs data
+                    enriched_row['prbs'] = group['prbs']
+                    if not enriched_row.get('prb_id_number') and group['prbs']:
+                        # If this row doesn't have PRB data, use the first PRB from the group
+                        enriched_row['prb_id_number'] = group['prbs'][0].get('prb_id_number', '')
+                        enriched_row['prb_id_status'] = group['prbs'][0].get('prb_id_status', '')
+                        enriched_row['prb_link'] = group['prbs'][0].get('prb_link', '')
+                    
+                    # Add HIIMs data
+                    enriched_row['hiims'] = group['hiims']
+                    if not enriched_row.get('hiim_id_number') and group['hiims']:
+                        # If this row doesn't have HIIM data, use the first HIIM from the group
+                        enriched_row['hiim_id_number'] = group['hiims'][0].get('hiim_id_number', '')
+                        enriched_row['hiim_id_status'] = group['hiims'][0].get('hiim_id_status', '')
+                        enriched_row['hiim_link'] = group['hiims'][0].get('hiim_link', '')
+                    
+                    # Add issues data
+                    enriched_row['issues'] = group['issues']
+                    if not enriched_row.get('issue_description') and group['issues']:
+                        # If this row doesn't have issue data, use the first issue from the group
+                        enriched_row['issue_description'] = group['issues'][0].get('description', '')
+                    
+                    # Add time loss data from issues if not present
+                    if not enriched_row.get('time_loss') and group['issues']:
+                        for issue in group['issues']:
+                            if issue.get('time_loss') and issue.get('time_loss').strip():
+                                enriched_row['time_loss'] = issue.get('time_loss')
+                                break
+                    
+                    result_entries.append(enriched_row)
         
         conn.close()
         return result_entries
@@ -730,7 +796,7 @@ class IndependentRowSQLiteAdapter:
             'cf_ra_text', 'cf_ra_status', 'acq_text', 'root_cause_application',
             'root_cause_type', 'xva_remarks', 'closing', 'iteration', 'reg_issue',
             'action_taken_and_update', 'reg_status', 'reg_prb', 'reg_hiim',
-            'backlog_item', 'dare', 'timings', 'puntuality_issue', 'quality',
+            'backlog_item', 'timings', 'puntuality_issue', 'quality',
             'quality_issue', 'others_prb', 'others_hiim'
         ]
         

@@ -1,3 +1,17 @@
+/* Readable cell for long descriptions (quality/punctuality/others) */
+.readable-cell {
+    white-space: pre-line !important;
+    word-break: break-word !important;
+    overflow-wrap: break-word !important;
+    text-overflow: unset !important;
+    overflow: visible !important;
+    line-height: 1.5 !important;
+    font-size: 11px !important;
+    max-width: 600px !important;
+    min-width: 120px !important;
+    padding: 8px 12px !important;
+    color: #2d3748 !important;
+}
 /* Reset and Base Styles */
 * {
     margin: 0;

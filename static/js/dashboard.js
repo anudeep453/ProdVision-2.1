@@ -114,7 +114,8 @@ const filters = {
     application: 'CVAR ALL', // Default to CVAR ALL
     prbOnly: document.getElementById('prb-only'),
     hiimOnly: document.getElementById('hiim-only'),
-    timeLossOnly: document.getElementById('time-loss-only')
+    timeLossOnly: document.getElementById('time-loss-only'),
+    nonInfraOnly: document.getElementById('non-infra-only')
 };
 
 // Search elements
@@ -1353,6 +1354,7 @@ function buildQueryString() {
     if (filters.prbOnly.checked) params.append('prb_only', 'true');
     if (filters.hiimOnly.checked) params.append('hiim_only', 'true');
     if (filters.timeLossOnly.checked) params.append('time_loss_only', 'true');
+    if (filters.nonInfraOnly && filters.nonInfraOnly.checked) params.append('non_infra_only', 'true');
     
     return params.toString();
 }
@@ -1519,17 +1521,27 @@ async function calculateMonthEndCounts(month, year) {
 
 function displayEntries(entries) {
     entriesTbody.innerHTML = '';
-    
+
+    // Non-Infra filter: filter out entries where infra_weekend_manual === 1
+    let filteredEntries = entries;
+    if (filters.nonInfraOnly && filters.nonInfraOnly.checked) {
+        filteredEntries = entries.filter(e => {
+            // Exclude if infra_weekend_manual is 1 (true/checked)
+            // Accept 1 (int), '1' (string), or true
+            return !(e.infra_weekend_manual === 1 || e.infra_weekend_manual === '1' || e.infra_weekend_manual === true);
+        });
+    }
+
     // Show/hide count displays based on filters
     const countDisplaysContainer = document.getElementById('count-displays-container');
     const prbCountDisplay = document.getElementById('prb-count-display');
     const hiimCountDisplay = document.getElementById('hiim-count-display');
-    
+
     let shouldShowCounts = false;
-    
+
     // Show PRB counts if PRB Only filter is checked
-    if (filters.prbOnly.checked && entries.length > 0) {
-        const prbCounts = calculatePrbCounts(entries);
+    if (filters.prbOnly.checked && filteredEntries.length > 0) {
+        const prbCounts = calculatePrbCounts(filteredEntries);
         document.getElementById('prb-total-count').textContent = prbCounts.total;
         document.getElementById('prb-active-count').textContent = prbCounts.active;
         document.getElementById('prb-closed-count').textContent = prbCounts.closed;
@@ -1538,10 +1550,10 @@ function displayEntries(entries) {
     } else {
         prbCountDisplay.style.display = 'none';
     }
-    
+
     // Show HIIM counts if HIIM Only filter is checked
-    if (filters.hiimOnly.checked && entries.length > 0) {
-        const hiimCounts = calculateHiimCounts(entries);
+    if (filters.hiimOnly.checked && filteredEntries.length > 0) {
+        const hiimCounts = calculateHiimCounts(filteredEntries);
         document.getElementById('hiim-total-count').textContent = hiimCounts.total;
         document.getElementById('hiim-active-count').textContent = hiimCounts.active;
         document.getElementById('hiim-closed-count').textContent = hiimCounts.closed;
@@ -1550,11 +1562,11 @@ function displayEntries(entries) {
     } else {
         hiimCountDisplay.style.display = 'none';
     }
-    
+
     // Show container if any counts should be displayed
     countDisplaysContainer.style.display = shouldShowCounts ? 'flex' : 'none';
-    
-    if (entries.length === 0) {
+
+    if (filteredEntries.length === 0) {
         const visibleColumns = getVisibleColumnsForApplication(filters.application);
         const colspan = visibleColumns.length;
         entriesTbody.innerHTML = `<tr><td colspan="${colspan}" class="text-center">No entries found</td></tr>`;
@@ -1566,21 +1578,21 @@ function displayEntries(entries) {
     const activeRowFilters = [filters.prbOnly.checked, filters.hiimOnly.checked, filters.timeLossOnly.checked].filter(Boolean).length;
     const isRowLevelFiltering = activeRowFilters === 1; // single filter (PRB, HIIM, or Time Loss)
     const forceExpandedMultiFilter = activeRowFilters > 1; // multi-filter AND mode
-    
+
     if (isRowLevelFiltering) {
         // Row-level filtering: Display each entry as an individual row without grouping/expansion
-        displayIndividualRows(entries);
+        displayIndividualRows(filteredEntries);
     } else if (forceExpandedMultiFilter) {
         // Multi-filter AND mode: show only item-set rows that satisfy ALL selected filters (PRB+HIIM etc.)
-        displayGroupedEntries(entries, { forceExpanded: true, multiFilter: true });
+        displayGroupedEntries(filteredEntries, { forceExpanded: true, multiFilter: true });
     } else {
         // Normal display: Group entries by week and expand multi-item entries
-        displayGroupedEntries(entries, { forceExpanded: false, multiFilter: false });
+        displayGroupedEntries(filteredEntries, { forceExpanded: false, multiFilter: false });
     }
-    
+
     // Apply column visibility based on current application
     toggleColumnsForApplication(filters.application);
-    
+
     // Authentication state is now handled by CSS classes
 }
 
@@ -2201,15 +2213,18 @@ function createEntryRow(entry, isFirstRow, itemType, entryId, childCount) {
         }
     }
     
-    // Get day of week (only show on first row)
-    const dayOfWeekRaw = isFirstRow ? getDayOfWeek(entry.date, entry.infra_weekend_manual) : '';
+    // Determine if we're in individual row mode (single filtering)
+    const isIndividualRowMode = row.classList.contains('individual-row');
     
-    // Show common fields only on first row, leave empty on sub-rows
-    const prcMailDisplay = isFirstRow ? prcMailBadge : '';
-    const cpAlertsDisplay = isFirstRow ? cpAlertsBadge : '';
-    const qualityDisplay = isFirstRow ? qualityBadge : '';
-    const remarksDisplay = isFirstRow ? (entry.remarks || 'N/A') : '';
-    const actionsDisplay = isFirstRow ? `
+    // Get day of week (only show on first row or in individual row mode)
+    const dayOfWeekRaw = (isFirstRow || isIndividualRowMode) ? getDayOfWeek(entry.date, entry.infra_weekend_manual) : '';
+    
+    // Show common fields only on first row or in individual row mode, leave empty on sub-rows
+    const prcMailDisplay = (isFirstRow || isIndividualRowMode) ? prcMailBadge : '';
+    const cpAlertsDisplay = (isFirstRow || isIndividualRowMode) ? cpAlertsBadge : '';
+    const qualityDisplay = (isFirstRow || isIndividualRowMode) ? qualityBadge : '';
+    const remarksDisplay = (isFirstRow || isIndividualRowMode) ? (entry.remarks || 'N/A') : '';
+    const actionsDisplay = (isFirstRow || isIndividualRowMode) ? `
         <button class="btn btn-primary btn-sm" onclick="editEntry(${entry.id})" title="Edit">
             <img src="/static/images/icons8-edit-128.png" alt="Edit" style="width: 16px; height: 16px;">
         </button>
@@ -2223,8 +2238,8 @@ function createEntryRow(entry, isFirstRow, itemType, entryId, childCount) {
     let prbDisplay = '';
     let hiimDisplay = '';
     
-    if (isFirstRow) {
-        // First row shows items normally
+    if (isFirstRow || isIndividualRowMode) {
+        // First row or individual row mode shows items normally
         issuesDisplay = issues.length ? issues.filter(i => i !== null).map(i => {
             const desc = i.description && i.description.trim() ? i.description.trim() : '';
             return desc ? `<div class="issue-list-item">${escapeHtml(desc)}</div>` : '';
@@ -2251,38 +2266,38 @@ function createEntryRow(entry, isFirstRow, itemType, entryId, childCount) {
         }
     }
     
-    // XVA specific displays (only populate on first row)
-    const acqDisplay = isFirstRow ? (entry.acq_text ? `<span class="status-badge">${formatTimeDisplay(entry.acq_text)}</span>` : 'N/A') : '';
-    const valoDisplay = isFirstRow ? (entry.valo_status ? `<span class="status-badge status-${(entry.valo_status || '').toLowerCase()}">${formatTimeDisplay(entry.valo_text || '')}</span>` : 'N/A') : '';
-    const sensiDisplay = isFirstRow ? (entry.sensi_status ? `<span class="status-badge status-${(entry.sensi_status || '').toLowerCase()}">${formatTimeDisplay(entry.sensi_text || '')}</span>` : 'N/A') : '';
-    const cfRaDisplay = isFirstRow ? (entry.cf_ra_status ? `<span class="status-badge status-${(entry.cf_ra_status || '').toLowerCase()}">${formatTimeDisplay(entry.cf_ra_text || '')}</span>` : 'N/A') : '';
-    const qualityLegacyDisplay = isFirstRow ? (entry.quality_legacy ? `<span class="quality-badge quality-${(entry.quality_legacy || '').toLowerCase()}">${entry.quality_legacy}</span>` : 'N/A') : '';
-    const qualityTargetDisplay = isFirstRow ? (entry.quality_target ? `<span class="quality-badge quality-${(entry.quality_target || '').toLowerCase()}">${entry.quality_target}</span>` : 'N/A') : '';
-    const rootCauseApplicationDisplay = isFirstRow ? (entry.root_cause_application || 'N/A') : '';
-    const rootCauseTypeDisplay = isFirstRow ? (entry.root_cause_type || 'N/A') : '';
-    const xvaRemarksDisplay = isFirstRow ? (entry.xva_remarks || 'N/A') : '';
+    // XVA specific displays (populate on first row or in individual row mode)
+    const acqDisplay = (isFirstRow || isIndividualRowMode) ? (entry.acq_text ? `<span class="status-badge">${formatTimeDisplay(entry.acq_text)}</span>` : 'N/A') : '';
+    const valoDisplay = (isFirstRow || isIndividualRowMode) ? (entry.valo_status ? `<span class="status-badge status-${(entry.valo_status || '').toLowerCase()}">${formatTimeDisplay(entry.valo_text || '')}</span>` : 'N/A') : '';
+    const sensiDisplay = (isFirstRow || isIndividualRowMode) ? (entry.sensi_status ? `<span class="status-badge status-${(entry.sensi_status || '').toLowerCase()}">${formatTimeDisplay(entry.sensi_text || '')}</span>` : 'N/A') : '';
+    const cfRaDisplay = (isFirstRow || isIndividualRowMode) ? (entry.cf_ra_status ? `<span class="status-badge status-${(entry.cf_ra_status || '').toLowerCase()}">${formatTimeDisplay(entry.cf_ra_text || '')}</span>` : 'N/A') : '';
+    const qualityLegacyDisplay = (isFirstRow || isIndividualRowMode) ? (entry.quality_legacy ? `<span class="quality-badge quality-${(entry.quality_legacy || '').toLowerCase()}">${entry.quality_legacy}</span>` : 'N/A') : '';
+    const qualityTargetDisplay = (isFirstRow || isIndividualRowMode) ? (entry.quality_target ? `<span class="quality-badge quality-${(entry.quality_target || '').toLowerCase()}">${entry.quality_target}</span>` : 'N/A') : '';
+    const rootCauseApplicationDisplay = (isFirstRow || isIndividualRowMode) ? (entry.root_cause_application || 'N/A') : '';
+    const rootCauseTypeDisplay = (isFirstRow || isIndividualRowMode) ? (entry.root_cause_type || 'N/A') : '';
+    const xvaRemarksDisplay = (isFirstRow || isIndividualRowMode) ? (entry.xva_remarks || 'N/A') : '';
 
-    // REG specific displays (only populate on first row)
+    // REG specific displays (populate on first row or in individual row mode)
     // REG ID removed from UI
-    const closingDisplay = isFirstRow ? (entry.closing || 'N/A') : '';
-    const iterationDisplay = isFirstRow ? (entry.iteration || 'N/A') : '';
-    const regIssueDisplay = isFirstRow ? (entry.reg_issue || 'N/A') : '';
-    const actionTakenDisplay = isFirstRow ? (entry.action_taken_and_update || 'N/A') : '';
+    const closingDisplay = (isFirstRow || isIndividualRowMode) ? (entry.closing || 'N/A') : '';
+    const iterationDisplay = (isFirstRow || isIndividualRowMode) ? (entry.iteration || 'N/A') : '';
+    const regIssueDisplay = (isFirstRow || isIndividualRowMode) ? (entry.reg_issue || 'N/A') : '';
+    const actionTakenDisplay = (isFirstRow || isIndividualRowMode) ? (entry.action_taken_and_update || 'N/A') : '';
     const regStatusRaw = (entry.reg_status || '').toLowerCase();
     const regStatusClass = (regStatusRaw === 'in progress' || regStatusRaw === 'resolved') ? 'ongoing' : regStatusRaw.replace(/\s+/g, '-');
-    const regStatusDisplay = isFirstRow ? (entry.reg_status ? `<span class="status-badge status-${regStatusClass}">${entry.reg_status}</span>` : 'N/A') : '';
-    const regPrbDisplay = isFirstRow ? (entry.reg_prb || 'N/A') : '';
-    const regHiimDisplay = isFirstRow ? (entry.reg_hiim || 'N/A') : '';
-    const backlogItemDisplay = isFirstRow ? (entry.backlog_item || 'N/A') : '';
+    const regStatusDisplay = (isFirstRow || isIndividualRowMode) ? (entry.reg_status ? `<span class="status-badge status-${regStatusClass}">${entry.reg_status}</span>` : 'N/A') : '';
+    const regPrbDisplay = (isFirstRow || isIndividualRowMode) ? (entry.reg_prb || 'N/A') : '';
+    const regHiimDisplay = (isFirstRow || isIndividualRowMode) ? (entry.reg_hiim || 'N/A') : '';
+    const backlogItemDisplay = (isFirstRow || isIndividualRowMode) ? (entry.backlog_item || 'N/A') : '';
     
-    // OTHERS display variables
-    const dareDisplay = isFirstRow ? (entry.dare || 'N/A') : '';
-    const timingsDisplay = isFirstRow ? (entry.timings || 'N/A') : '';
-    const puntualityIssueDisplay = isFirstRow ? (entry.puntuality_issue || 'N/A') : '';
-    const othersQualityDisplay = isFirstRow ? (entry.quality || 'N/A') : '';
-    const qualityIssueDisplay = isFirstRow ? (entry.quality_issue || 'N/A') : '';
-    const othersPrbDisplay = isFirstRow ? (entry.others_prb || 'N/A') : '';
-    const othersHiimDisplay = isFirstRow ? (entry.others_hiim || 'N/A') : '';
+    // OTHERS display variables (populate on first row or in individual row mode)
+    const dareDisplay = (isFirstRow || isIndividualRowMode) ? (entry.dare || 'N/A') : '';
+    const timingsDisplay = (isFirstRow || isIndividualRowMode) ? (entry.timings || 'N/A') : '';
+    const puntualityIssueDisplay = (isFirstRow || isIndividualRowMode) ? (entry.puntuality_issue || 'N/A') : '';
+    const othersQualityDisplay = (isFirstRow || isIndividualRowMode) ? (entry.quality || 'N/A') : '';
+    const qualityIssueDisplay = (isFirstRow || isIndividualRowMode) ? (entry.quality_issue || 'N/A') : '';
+    const othersPrbDisplay = (isFirstRow || isIndividualRowMode) ? (entry.others_prb || 'N/A') : '';
+    const othersHiimDisplay = (isFirstRow || isIndividualRowMode) ? (entry.others_hiim || 'N/A') : '';
 
     // Time loss display logic: 
     // - If entry has time_loss value → show it
@@ -2297,12 +2312,12 @@ function createEntryRow(entry, isFirstRow, itemType, entryId, childCount) {
         day: { html: dayOfWeekRaw, cls: 'day-column', isHtml: true },
         prc_mail: { html: prcMailDisplay, cls: 'common-field' },
         cp_alerts: { html: cpAlertsDisplay, cls: 'common-field' },
-    quality_status: { html: qualityDisplay, cls: 'common-field' },
-        issue_description: { html: issuesDisplay, cls: 'item-field' },
-    time_loss: { html: timeLossDisplay , cls: 'common-field' },
+        quality_status: { html: qualityDisplay, cls: 'common-field' },
+        issue_description: { html: issuesDisplay, cls: 'readable-cell' },
+        time_loss: { html: timeLossDisplay , cls: 'common-field' },
         prb_id: { html: prbDisplay, cls: 'item-field' },
         hiim_id: { html: hiimDisplay, cls: 'item-field' },
-        remarks: { html: remarksDisplay, cls: 'common-field' },
+        remarks: { html: remarksDisplay, cls: 'readable-cell' },
         acq: { html: acqDisplay, cls: 'common-field' },
         valo: { html: valoDisplay, cls: 'common-field' },
         sensi: { html: sensiDisplay, cls: 'common-field' },
@@ -2312,7 +2327,7 @@ function createEntryRow(entry, isFirstRow, itemType, entryId, childCount) {
         root_cause_application: { html: rootCauseApplicationDisplay, cls: 'common-field' },
         root_cause_type: { html: rootCauseTypeDisplay, cls: 'common-field' },
         xva_remarks: { html: xvaRemarksDisplay, cls: 'common-field' },
-    // reg_id removed from UI
+        // reg_id removed from UI
         closing: { html: closingDisplay, cls: 'common-field' },
         iteration: { html: iterationDisplay, cls: 'common-field' },
         reg_issue: { html: regIssueDisplay, cls: 'common-field' },
@@ -2324,9 +2339,9 @@ function createEntryRow(entry, isFirstRow, itemType, entryId, childCount) {
         // OTHERS columns
         dare: { html: dareDisplay, cls: 'common-field' },
         timings: { html: timingsDisplay, cls: 'common-field' },
-        puntuality_issue: { html: puntualityIssueDisplay, cls: 'common-field' },
-    quality: { html: othersQualityDisplay, cls: 'common-field' },
-        quality_issue: { html: qualityIssueDisplay, cls: 'common-field' },
+        puntuality_issue: { html: puntualityIssueDisplay, cls: 'readable-cell' },
+        quality: { html: othersQualityDisplay, cls: 'common-field' },
+        quality_issue: { html: qualityIssueDisplay, cls: 'readable-cell' },
         others_prb: { html: othersPrbDisplay, cls: 'common-field' },
         others_hiim: { html: othersHiimDisplay, cls: 'common-field' },
         actions: { html: actionsDisplay, cls: 'edit-column' }
@@ -4856,13 +4871,14 @@ function clearFilters() {
     filters.prbOnly.checked = false;
     filters.hiimOnly.checked = false;
     filters.timeLossOnly.checked = false;
-    
+    if (filters.nonInfraOnly) filters.nonInfraOnly.checked = false;
+
     // Reset application to CVAR ALL
     filters.application = 'CVAR ALL';
     document.querySelectorAll('.header-app-btn, .filter-app-btn').forEach(btn => btn.classList.remove('active'));
     const activeBtn = document.querySelector('.header-app-btn[data-app="CVAR ALL"]') || document.querySelector('.filter-app-btn[data-app="CVAR ALL"]');
     if (activeBtn) activeBtn.classList.add('active');
-    
+
     loadData();
 }
 

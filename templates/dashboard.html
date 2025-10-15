@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/webp" href="{{ url_for('static', filename='images/web-tab-image.webp') }}">
     <title>CCR Daily Production</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -58,6 +59,11 @@
                     <div class="filter-group checkbox-group">
                         <label>
                             <input type="checkbox" id="time-loss-only"> Time Loss Only
+                        </label>
+                    </div>
+                    <div class="filter-group checkbox-group">
+                        <label>
+                            <input type="checkbox" id="non-infra-only"> Non-Infra
                         </label>
                     </div>
                     <div class="filter-actions">
@@ -335,13 +341,7 @@
                                 <div class="column-resize-handle" title="Drag to resize column"></div>
                             </th>
                             <!-- OTHERS-specific columns -->
-                            <th draggable="true" data-column="dare" class="draggable-header">
-                                <span class="column-content">
-                                    <span class="column-title">DARE</span>
-                                    <span class="drag-handle">⋮⋮</span>
-                                </span>
-                                <div class="column-resize-handle" title="Drag to resize column"></div>
-                            </th>
+
                             <th draggable="true" data-column="timings" class="draggable-header">
                                 <span class="column-content">
                                     <span class="column-title">TIMINGS</span>
@@ -736,10 +736,7 @@
                     </label>
                 </div>
                 
-                <div class="form-group">
-                    <label for="others-entry-dare">DARE</label>
-                    <input type="text" id="others-entry-dare" name="dare" placeholder="Enter DARE">
-                </div>
+
                 
                 <div class="form-group">
                     <label for="others-entry-timings">TIMINGS</label>
