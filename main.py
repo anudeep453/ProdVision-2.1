@@ -254,7 +254,7 @@ def validate_entry_data(data):
         # Skip CVAR/XVA-specific validation for REG entries
     elif application_name == 'OTHERS':
         # OTHERS-specific validation - only date and application_name are required
-        # All other fields (DARE, TIMINGS, PUNTUALITY_ISSUE, QUALITY, QUALITY_ISSUE, PRB, HIIM) are optional
+    # All other fields (BUSINESS CHAIN, TIMINGS, PUNTUALITY_ISSUE, QUALITY, QUALITY_ISSUE, PRB, HIIM) are optional
         pass
     else:
         # CVAR-specific validation - validate single fields or arrays
@@ -730,9 +730,9 @@ def download_excel():
                 'date', 'day', 'closing', 'iteration', 'reg_issue', 'action_taken_and_update', 'reg_status', 'reg_prb', 'reg_hiim', 'backlog_item'
             ]
         elif application == 'OTHERS':
-            headers = ['Date', 'Day', 'DARE', 'TIMINGS', 'PUNTUALITY ISSUE', 'QUALITY', 'QUALITY ISSUE', 'PRB', 'HIIM']
+            headers = ['Date', 'Day', 'BUSINESS CHAIN', 'TIMINGS', 'PUNTUALITY ISSUE', 'QUALITY', 'QUALITY ISSUE', 'PRB', 'HIIM']
             field_mappings = [
-                'date', 'day', 'dare', 'timings', 'puntuality_issue', 'quality', 'quality_issue', 'others_prb', 'others_hiim'
+                'date', 'day', 'business_chain', 'timings', 'puntuality_issue', 'quality', 'quality_issue', 'others_prb', 'others_hiim'
             ]
         else:
             # Default for unknown applications
