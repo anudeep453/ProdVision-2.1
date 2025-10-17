@@ -181,7 +181,12 @@ class IndependentRowSQLiteAdapter:
             now = datetime.utcnow().isoformat()
             date = entry_data.get('date', '')
             application_name = entry_data.get('application_name', '')
-            grouping_key = self.generate_grouping_key(date, application_name)
+            # Ensure grouping_key always matches the date field
+            correct_grouping_key = self.generate_grouping_key(date, application_name)
+            # If grouping_key is present and does not match, override it
+            if entry_data.get('grouping_key') != correct_grouping_key:
+                entry_data['grouping_key'] = correct_grouping_key
+            grouping_key = correct_grouping_key
             
             # Common data to be duplicated across all rows (excluding time_loss which is item-specific)
             common_data = {
