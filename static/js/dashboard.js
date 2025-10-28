@@ -810,7 +810,6 @@ function toggleFormFieldValidation(application) {
     
     // Define fields that are required for CVAR but not for XVA
     const cvarRequiredFields = [
-        'prc_mail_text', 'prc_mail_status',
         'quality_status'
     ];
     
@@ -2267,7 +2266,7 @@ function createEntryRow(entry, isFirstRow, itemType, entryId, childCount) {
     }
     
     // XVA specific displays (populate on first row or in individual row mode)
-    const acqDisplay = (isFirstRow || isIndividualRowMode) ? (entry.acq_text ? `<span class="status-badge">${formatTimeDisplay(entry.acq_text)}</span>` : 'N/A') : '';
+    const acqDisplay = (isFirstRow || isIndividualRowMode) ? (entry.acq_text ? `<span class="status-badge xva-acq-timing">${formatTimeDisplay(entry.acq_text)}</span>` : 'N/A') : '';
     const valoDisplay = (isFirstRow || isIndividualRowMode) ? (entry.valo_status ? `<span class="status-badge status-${(entry.valo_status || '').toLowerCase()}">${formatTimeDisplay(entry.valo_text || '')}</span>` : 'N/A') : '';
     const sensiDisplay = (isFirstRow || isIndividualRowMode) ? (entry.sensi_status ? `<span class="status-badge status-${(entry.sensi_status || '').toLowerCase()}">${formatTimeDisplay(entry.sensi_text || '')}</span>` : 'N/A') : '';
     const cfRaDisplay = (isFirstRow || isIndividualRowMode) ? (entry.cf_ra_status ? `<span class="status-badge status-${(entry.cf_ra_status || '').toLowerCase()}">${formatTimeDisplay(entry.cf_ra_text || '')}</span>` : 'N/A') : '';
@@ -2287,7 +2286,7 @@ function createEntryRow(entry, isFirstRow, itemType, entryId, childCount) {
     const regStatusClass = (regStatusRaw === 'in progress' || regStatusRaw === 'resolved') ? 'ongoing' : regStatusRaw.replace(/\s+/g, '-');
     const regStatusDisplay = (isFirstRow || isIndividualRowMode) ? (entry.reg_status ? `<span class="status-badge status-${regStatusClass}">${entry.reg_status}</span>` : 'N/A') : '';
     const regPrbDisplay = (isFirstRow || isIndividualRowMode) ? (entry.reg_prb || 'N/A') : '';
-    const regHiimDisplay = (isFirstRow || isIndividualRowMode) ? (entry.reg_hiim || 'N/A') : '';
+    const regHiimDisplay = (isFirstRow || isIndividualRowMode) ? formatHiimDisplay(entry.reg_hiim) : '';
     const backlogItemDisplay = (isFirstRow || isIndividualRowMode) ? (entry.backlog_item || 'N/A') : '';
     
     // OTHERS display variables (populate on first row or in individual row mode)
@@ -2297,7 +2296,7 @@ function createEntryRow(entry, isFirstRow, itemType, entryId, childCount) {
     const othersQualityDisplay = (isFirstRow || isIndividualRowMode) ? (entry.quality || 'N/A') : '';
     const qualityIssueDisplay = (isFirstRow || isIndividualRowMode) ? (entry.quality_issue || 'N/A') : '';
     const othersPrbDisplay = (isFirstRow || isIndividualRowMode) ? (entry.others_prb || 'N/A') : '';
-    const othersHiimDisplay = (isFirstRow || isIndividualRowMode) ? (entry.others_hiim || 'N/A') : '';
+    const othersHiimDisplay = (isFirstRow || isIndividualRowMode) ? formatHiimDisplay(entry.others_hiim) : '';
 
     // Time loss display logic: 
     // - If entry has time_loss value → show it
@@ -3532,7 +3531,7 @@ function populateREGEntryForm(entry) {
         else document.getElementById('reg-entry-status').value = '';
     }
     document.getElementById('reg-entry-prb').value = entry.reg_prb || '';
-    document.getElementById('reg-entry-hiim').value = entry.reg_hiim || '';
+    document.getElementById('reg-entry-hiim').value = extractHiimIdFromValue(entry.reg_hiim) || '';
     document.getElementById('reg-entry-backlog-item').value = entry.backlog_item || '';
     
     // Apply status styling for REG fields after populating values
@@ -3559,7 +3558,7 @@ function populateOTHERSEntryForm(entry) {
     document.getElementById('others-entry-quality').value = entry.quality || '';
     document.getElementById('others-entry-quality-issue').value = entry.quality_issue || '';
     document.getElementById('others-entry-prb').value = entry.others_prb || '';
-    document.getElementById('others-entry-hiim').value = entry.others_hiim || '';
+    document.getElementById('others-entry-hiim').value = extractHiimIdFromValue(entry.others_hiim) || '';
 }
 
 // Populate the new combined item cards UI from an entry object's issues/prbs/hiims
@@ -4019,18 +4018,18 @@ function addCombinedItemCard(isXva = false, initialData = null) {
     prbIdInput.placeholder = 'PRB ID';
     prbIdInput.min = 1;
     prbIdInput.step = 1;
-    prbIdInput.disabled = true; // Initially disabled
+    prbIdInput.disabled = false;
 
     const prbStatusSelect = document.createElement('select');
     prbStatusSelect.className = 'prb-id-status';
     prbStatusSelect.innerHTML = '<option value="">Select Status</option><option value="active">Active</option><option value="closed">Closed</option>';
-    prbStatusSelect.disabled = true; // Initially disabled
+    prbStatusSelect.disabled = false;
 
     const prbLinkInput = document.createElement('input');
     prbLinkInput.type = 'url';
     prbLinkInput.className = 'prb-link';
     prbLinkInput.placeholder = 'https://prb.example.com/12345';
-    prbLinkInput.disabled = true; // Initially disabled
+    prbLinkInput.disabled = false;
 
     // Populate initial data if provided
     if (initialData && initialData.prb) {
@@ -4044,7 +4043,6 @@ function addCombinedItemCard(isXva = false, initialData = null) {
     prbFields.appendChild(prbStatusSelect);
     prbFields.appendChild(prbLinkInput);
     prbSection.appendChild(prbLabel);
-    prbSection.appendChild(prbHelper);
     prbSection.appendChild(prbFields);
 
     // Create HIIM section
@@ -4069,18 +4067,18 @@ function addCombinedItemCard(isXva = false, initialData = null) {
     hiimIdInput.placeholder = 'HIIM ID';
     hiimIdInput.min = 1;
     hiimIdInput.step = 1;
-    hiimIdInput.disabled = true; // Initially disabled
+    hiimIdInput.disabled = false;
 
     const hiimStatusSelect = document.createElement('select');
     hiimStatusSelect.className = 'hiim-id-status';
     hiimStatusSelect.innerHTML = '<option value="">Select Status</option><option value="active">Active</option><option value="closed">Closed</option>';
-    hiimStatusSelect.disabled = true; // Initially disabled
+    hiimStatusSelect.disabled = false;
 
     const hiimLinkInput = document.createElement('input');
     hiimLinkInput.type = 'url';
     hiimLinkInput.className = 'hiim-link';
     hiimLinkInput.placeholder = 'https://hiim.example.com/12345';
-    hiimLinkInput.disabled = true; // Initially disabled
+    hiimLinkInput.disabled = false;
 
     // Populate initial data if provided
     if (initialData && initialData.hiim) {
@@ -4090,11 +4088,21 @@ function addCombinedItemCard(isXva = false, initialData = null) {
         hiimLinkInput.value = h.hiim_link || h.link || '';
     }
 
+    // Auto-generate HIIM link when HIIM ID is entered
+    hiimIdInput.addEventListener('input', function() {
+        const hiimId = this.value.trim();
+        if (hiimId && !isNaN(hiimId) && hiimId > 0) {
+            // Auto-generate HIIM link if not already set
+            if (!hiimLinkInput.value.trim()) {
+                hiimLinkInput.value = `https://unity.itsm.socgen/saw/custom/HighImpactIncident_c/details/${hiimId}/general`;
+            }
+        }
+    });
+
     hiimFields.appendChild(hiimIdInput);
     hiimFields.appendChild(hiimStatusSelect);
     hiimFields.appendChild(hiimLinkInput);
     hiimSection.appendChild(hiimLabel);
-    hiimSection.appendChild(hiimHelper);
     hiimSection.appendChild(hiimFields);
 
     // Add event listener to issue description to enable/disable PRB and HIIM fields
@@ -4391,9 +4399,7 @@ function validateCombinedItems(isXva = false) {
             const hasPrb = prbIdInput && prbIdInput.value.trim();
             const hasHiim = hiimIdInput && hiimIdInput.value.trim();
             
-            if ((hasPrb || hasHiim) && !hasIssue) {
-                errors.push(`Item Set #${index + 1}: PRB or HIIM entries require a punctuality issue description.`);
-            }
+            // Allow PRB/HIIM without requiring a punctuality issue description
         });
     }
     
@@ -4407,6 +4413,44 @@ function formatTimeDisplay(timeString) {
     
     // Return 24-hour format time directly (no AM/PM needed)
     return timeString;
+}
+
+function formatHiimDisplay(hiimValue) {
+    if (!hiimValue || hiimValue === 'N/A') {
+        return 'N/A';
+    }
+    
+    // Check if it's already a URL
+    if (hiimValue.startsWith('http://') || hiimValue.startsWith('https://')) {
+        // Extract HIIM ID from URL for display
+        const urlMatch = hiimValue.match(/\/details\/(\d+)\//);
+        const hiimId = urlMatch ? urlMatch[1] : hiimValue;
+        return `<a href="${hiimValue}" target="_blank" class="clickable-id" title="Click to open HIIM link">${hiimId}</a>`;
+    }
+    
+    // Check if it's a numeric HIIM ID
+    if (!isNaN(hiimValue) && hiimValue > 0) {
+        const hiimLink = `https://unity.itsm.socgen/saw/custom/HighImpactIncident_c/details/${hiimValue}/general`;
+        return `<a href="${hiimLink}" target="_blank" class="clickable-id" title="Click to open HIIM link">${hiimValue}</a>`;
+    }
+    
+    // Otherwise display as plain text
+    return hiimValue;
+}
+
+function extractHiimIdFromValue(hiimValue) {
+    if (!hiimValue || hiimValue === 'N/A') {
+        return '';
+    }
+    
+    // If it's a URL, extract the HIIM ID
+    if (hiimValue.startsWith('http://') || hiimValue.startsWith('https://')) {
+        const urlMatch = hiimValue.match(/\/details\/(\d+)\//);
+        return urlMatch ? urlMatch[1] : hiimValue;
+    }
+    
+    // Otherwise return as-is
+    return hiimValue;
 }
 
 async function handleCVAREntrySubmit(event) {
@@ -4663,13 +4707,16 @@ async function handleXVAEntrySubmit(event) {
     // response status debug removed
         
         if (response.ok) {
-            // success debug removed
+            const result = await response.json();
             hideEntryModal();
-            loadData(); // Refresh data
+            if (result.fresh_entries) {
+                displayEntries(result.fresh_entries);
+            } else {
+                loadData(); // fallback
+            }
             endSubmission(xvaEntryForm, true); // Mark as successful
         } else {
             const error = await response.json();
-            // error body debug removed
             if (error.error && error.error.includes('already exists')) {
                 alert('Error: ' + error.error + '\n\nPlease edit the existing entry or choose a different date.');
             } else {
@@ -4821,8 +4868,13 @@ async function handleOTHERSEntrySubmit(event) {
 
 async function editEntry(entryId) {
     try {
-        // Fetch the entry data from the API
-        const response = await fetch(`/api/entries/${entryId}`, {
+        // Always pass application query param for correct backend lookup
+        let app = (typeof filters !== 'undefined' && filters.application) ? filters.application : '';
+        let url = `/api/entries/${entryId}`;
+        if (app) {
+            url += `?application=${encodeURIComponent(app)}`;
+        }
+        const response = await fetch(url, {
             credentials: 'include'
         });
         
@@ -4850,8 +4902,14 @@ async function deleteEntry(entryId) {
         });
         
         if (response.ok) {
+            const result = await response.json();
             alert('Entry deleted successfully');
-            loadData(); // Refresh data
+            // If fresh_entries is returned, update table immediately for XVA
+            if (result.fresh_entries) {
+                displayEntries(result.fresh_entries);
+            } else {
+                loadData(); // fallback
+            }
         } else if (response.status === 401) {
             alert('Authentication required. Please click "Enable Edit" first.');
         } else {
@@ -4872,12 +4930,6 @@ function clearFilters() {
     filters.hiimOnly.checked = false;
     filters.timeLossOnly.checked = false;
     if (filters.nonInfraOnly) filters.nonInfraOnly.checked = false;
-
-    // Reset application to CVAR ALL
-    filters.application = 'CVAR ALL';
-    document.querySelectorAll('.header-app-btn, .filter-app-btn').forEach(btn => btn.classList.remove('active'));
-    const activeBtn = document.querySelector('.header-app-btn[data-app="CVAR ALL"]') || document.querySelector('.filter-app-btn[data-app="CVAR ALL"]');
-    if (activeBtn) activeBtn.classList.add('active');
 
     loadData();
 }
@@ -7053,6 +7105,39 @@ function setupConditionalFieldValidation() {
         hiimIdInput.addEventListener('input', function() {
             const hasHiimId = this.value.trim() !== '';
             updateFieldRequirements(hasHiimId, hiimStatusSelect, hiimLinkInput, hiimLinkRequired);
+            
+            // Auto-generate HIIM link when HIIM ID is entered
+            const hiimId = this.value.trim();
+            if (hiimId && !isNaN(hiimId) && hiimId > 0) {
+                // Auto-generate HIIM link if not already set
+                if (hiimLinkInput && !hiimLinkInput.value.trim()) {
+                    hiimLinkInput.value = `https://unity.itsm.socgen/saw/custom/HighImpactIncident_c/details/${hiimId}/general`;
+                }
+            }
+        });
+    }
+
+    // REG HIIM auto-generation
+    const regHiimInput = document.getElementById('reg-entry-hiim');
+    if (regHiimInput) {
+        regHiimInput.addEventListener('input', function() {
+            const hiimValue = this.value.trim();
+            // If it looks like a HIIM ID (numeric), auto-convert to link
+            if (hiimValue && !isNaN(hiimValue) && hiimValue > 0 && !hiimValue.includes('http')) {
+                this.value = `https://unity.itsm.socgen/saw/custom/HighImpactIncident_c/details/${hiimValue}/general`;
+            }
+        });
+    }
+
+    // OTHERS HIIM auto-generation
+    const othersHiimInput = document.getElementById('others-entry-hiim');
+    if (othersHiimInput) {
+        othersHiimInput.addEventListener('input', function() {
+            const hiimValue = this.value.trim();
+            // If it looks like a HIIM ID (numeric), auto-convert to link
+            if (hiimValue && !isNaN(hiimValue) && hiimValue > 0 && !hiimValue.includes('http')) {
+                this.value = `https://unity.itsm.socgen/saw/custom/HighImpactIncident_c/details/${hiimValue}/general`;
+            }
         });
     }
 }
