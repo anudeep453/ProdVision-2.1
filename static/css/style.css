@@ -1385,6 +1385,20 @@ body {
     word-wrap: break-word;
 }
 
+/* Root Cause Application and Type columns - allow full text display */
+.data-table th[data-column="root_cause_application"],
+.data-table th[data-column="root_cause_type"],
+.data-table td[data-column="root_cause_application"],
+.data-table td[data-column="root_cause_type"] {
+    min-width: 120px;
+    max-width: 400px;
+    white-space: normal;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    text-overflow: unset;
+    overflow: visible;
+}
+
 /* REG-specific column styling */
 .data-table th[data-column="closing"],
 .data-table th[data-column="iteration"],
