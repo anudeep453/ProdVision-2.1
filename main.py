@@ -1,20 +1,8 @@
-import sys
 import os
 import threading
 import time
 import random
 import logging
-
-# Check Python version compatibility
-if sys.version_info < (3, 7):
-    # Use direct stderr prints before logging config just for hard failure clarity
-    sys.stderr.write("❌ Python 3.7.0 or higher is required\n")
-    sys.stderr.write(f"Current version: {sys.version}\n")
-    sys.stderr.write("Please install Python 3.7.0 from https://www.python.org/downloads/\n")
-    sys.exit(1)
-elif sys.version_info >= (3, 8):
-    # Warning will be logged after logger initialization (deferred)
-    pass
 
 from flask import Flask, render_template, request, jsonify, session, send_file
 from flask_session import Session
@@ -216,18 +204,12 @@ def validate_entry_data(data):
         # Minimal requirement set
         required_fields = common_required_fields
     else:
-        # CVAR (ALL/NYQ) required fields: require either single-time fields or arrays
-        required_fields = common_required_fields + ['prc_mail_text', 'prc_mail_status']
+        # CVAR (ALL/NYQ) fields: prc_mail_text and prc_mail_status are now optional
+        required_fields = common_required_fields
     
     # Check required fields (allow arrays for multiple items)
     for field in required_fields:
-        # If arrays are provided, skip single-field requirement
         if field not in data or not data[field]:
-            # allow presence of arrays: 'issues', 'prbs', 'hiims' as alternatives
-            if field in ('prc_mail_text', 'prc_mail_status'):
-                # Accept if prbs/hiims arrays or issues array present
-                if any(isinstance(data.get(k), list) and len(data.get(k)) > 0 for k in ('issues', 'prbs', 'hiims')):
-                    continue
             return False, f'Missing required field: {field}'
     
     # Validate status values based on application type
@@ -653,7 +635,16 @@ def update_entry(entry_id):
         
         # Update entry - pass the application name for database targeting
         updated_entry = entry_manager.update_entry(entry_id, data, existing_application)
-        
+
+        # For XVA, return fresh entries list for immediate UI update
+        if existing_application == 'XVA':
+            fresh_entries = entry_manager.get_entries_by_application('XVA')
+            response = jsonify({'updated_entry': updated_entry, 'fresh_entries': fresh_entries})
+            response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+            response.headers['Pragma'] = 'no-cache'
+            response.headers['Expires'] = '0'
+            return response
+
         if updated_entry:
             return jsonify(updated_entry)
         else:
@@ -669,9 +660,17 @@ def delete_entry(entry_id):
     try:
         # Delete entry - the method will search all databases automatically
         success = entry_manager.delete_entry(entry_id)
+        # Try to get application from query param for more efficient lookup
+        application = request.args.get('application')
+        if application == 'XVA':
+            fresh_entries = entry_manager.get_entries_by_application('XVA')
+            response = jsonify({'message': 'Entry deleted successfully', 'fresh_entries': fresh_entries})
+            response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+            response.headers['Pragma'] = 'no-cache'
+            response.headers['Expires'] = '0'
+            return response
         if success:
             response = jsonify({'message': 'Entry deleted successfully'})
-            # Add cache-busting headers to ensure subsequent requests get fresh data
             response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
             response.headers['Pragma'] = 'no-cache'
             response.headers['Expires'] = '0'
