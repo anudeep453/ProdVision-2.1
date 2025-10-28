@@ -1,0 +1,4 @@
+/* Force ACQ timings in XVA dashboard to use black font for visibility */
+.xva-acq-timing, .xva-acq-timing * {
+    color: #222 !important;
+}
