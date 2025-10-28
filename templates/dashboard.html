@@ -9,6 +9,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/acq-timing-fix.css') }}">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
 </head>
@@ -442,10 +443,10 @@
                 </div>
                 
                 <div class="form-group non-xva-field">
-                    <label for="entry-prc-mail">PRC Mail *</label>
+                    <label for="entry-prc-mail">PRC Mail</label>
                     <div class="combined-field">
-                        <input type="text" id="entry-prc-mail-text" name="prc_mail_text" placeholder="HH:MM (24h)" required maxlength="5" pattern="[0-9]{1,2}:[0-9]{2}">
-                        <select id="entry-prc-mail-status" name="prc_mail_status" class="status-select" required>
+                        <input type="text" id="entry-prc-mail-text" name="prc_mail_text" placeholder="HH:MM (24h)" maxlength="5" pattern="[0-9]{1,2}:[0-9]{2}">
+                        <select id="entry-prc-mail-status" name="prc_mail_status" class="status-select">
                             <option value="">Select Status</option>
                             <option value="Red">Red</option>
                             <option value="Yellow">Yellow</option>
@@ -671,6 +672,11 @@
                         <option value="M5">M5</option>
                         <option value="M6">M6</option>
                         <option value="M7">M7</option>
+                            <option value="M8">M8</option>
+                            <option value="M9">M9</option>
+                            <option value="M10">M10</option>
+                            <option value="M11">M11</option>
+                            <option value="M12">M12</option>
                     </select>
                 </div>
                 
