@@ -1681,20 +1681,23 @@ body {
 /* Custom scrollbar for form containers */
 #entry-form::-webkit-scrollbar,
 #cvar-entry-form::-webkit-scrollbar,
-#xva-entry-form::-webkit-scrollbar {
+#xva-entry-form::-webkit-scrollbar,
+#others-entry-form::-webkit-scrollbar {
     width: 6px;
 }
 
 #entry-form::-webkit-scrollbar-track,
 #cvar-entry-form::-webkit-scrollbar-track,
-#xva-entry-form::-webkit-scrollbar-track {
+#xva-entry-form::-webkit-scrollbar-track,
+#others-entry-form::-webkit-scrollbar-track {
     background: rgba(102, 126, 234, 0.03);
     border-radius: 3px;
 }
 
 #entry-form::-webkit-scrollbar-thumb,
 #cvar-entry-form::-webkit-scrollbar-thumb,
-#xva-entry-form::-webkit-scrollbar-thumb {
+#xva-entry-form::-webkit-scrollbar-thumb,
+#others-entry-form::-webkit-scrollbar-thumb {
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     border-radius: 3px;
     transition: all 0.3s ease;
@@ -1702,7 +1705,8 @@ body {
 
 #entry-form::-webkit-scrollbar-thumb:hover,
 #cvar-entry-form::-webkit-scrollbar-thumb:hover,
-#xva-entry-form::-webkit-scrollbar-thumb:hover {
+#xva-entry-form::-webkit-scrollbar-thumb:hover,
+#others-entry-form::-webkit-scrollbar-thumb:hover {
     background: linear-gradient(135deg, #5a67d8 0%, #6b46c1 100%);
 }
 
@@ -1710,7 +1714,8 @@ body {
 .modal-content,
 #entry-form,
 #cvar-entry-form,
-#xva-entry-form {
+#xva-entry-form,
+#others-entry-form {
     scroll-behavior: smooth;
     -webkit-overflow-scrolling: touch;
 }
@@ -2362,7 +2367,8 @@ body {
 #entry-form,
 #cvar-entry-form,
 #xva-entry-form,
-#reg-entry-form {
+#reg-entry-form,
+#others-entry-form {
     padding: 35px 40px 40px;
     background: linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, rgba(248, 250, 252, 0.1) 100%);
     border-radius: 0 0 20px 20px;
@@ -2900,7 +2906,8 @@ body {
     
     #entry-form,
     #cvar-entry-form,
-    #xva-entry-form {
+    #xva-entry-form,
+    #others-entry-form {
         padding: 24px;
     }
     
