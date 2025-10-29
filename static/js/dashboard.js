@@ -2291,9 +2291,9 @@ function createEntryRow(entry, isFirstRow, itemType, entryId, childCount) {
     
     // OTHERS display variables (populate on first row or in individual row mode)
     const businessChainDisplay = (isFirstRow || isIndividualRowMode) ? (entry.business_chain || 'N/A') : '';
-    const timingsDisplay = (isFirstRow || isIndividualRowMode) ? (entry.timings || 'N/A') : '';
+    const timingsDisplay = (isFirstRow || isIndividualRowMode) ? createStatusBadge(entry.timings, entry.timings_status) : '';
     const puntualityIssueDisplay = (isFirstRow || isIndividualRowMode) ? (entry.puntuality_issue || 'N/A') : '';
-    const othersQualityDisplay = (isFirstRow || isIndividualRowMode) ? (entry.quality || 'N/A') : '';
+    const othersQualityDisplay = (isFirstRow || isIndividualRowMode) ? createQualityBadge(entry.quality_status) : '';
     const qualityIssueDisplay = (isFirstRow || isIndividualRowMode) ? (entry.quality_issue || 'N/A') : '';
     const othersPrbDisplay = (isFirstRow || isIndividualRowMode) ? (entry.others_prb || 'N/A') : '';
     const othersHiimDisplay = (isFirstRow || isIndividualRowMode) ? formatHiimDisplay(entry.others_hiim) : '';
@@ -3249,8 +3249,17 @@ function showEntryModal(entry = null) {
     // Ensure max date is set to today (in case page has been open for a while)
     setMaxDateToToday();
     
+    // Determine application - use entry's application_name if editing, otherwise use active button
+    let currentApplication;
+    if (entry && entry.application_name) {
+        currentApplication = entry.application_name;
+    } else {
+        const activeAppBtn = document.querySelector('.header-app-btn.active') || document.querySelector('.filter-app-btn.active');
+        currentApplication = activeAppBtn ? activeAppBtn.getAttribute('data-app') : 'CVAR ALL';
+    }
+    
     // Show/hide appropriate form based on current application
-    if (filters.application === 'XVA') {
+    if (currentApplication === 'XVA') {
         cvarEntryForm.style.display = 'none';
         xvaEntryForm.style.display = 'block';
         regEntryForm.style.display = 'none';
@@ -3268,7 +3277,7 @@ function showEntryModal(entry = null) {
             const defaultDate = getDefaultEntryDate();
             document.getElementById('xva-entry-date').value = defaultDate;
         }
-    } else if (filters.application === 'REG') {
+    } else if (currentApplication === 'REG') {
         cvarEntryForm.style.display = 'none';
         xvaEntryForm.style.display = 'none';
         regEntryForm.style.display = 'block';
@@ -3286,7 +3295,7 @@ function showEntryModal(entry = null) {
             const defaultDate = getDefaultEntryDate();
             document.getElementById('reg-entry-date').value = defaultDate;
         }
-    } else if (filters.application === 'OTHERS') {
+    } else if (currentApplication === 'OTHERS') {
         cvarEntryForm.style.display = 'none';
         xvaEntryForm.style.display = 'none';
         regEntryForm.style.display = 'none';
@@ -3552,13 +3561,24 @@ function populateOTHERSEntryForm(entry) {
         }
     }
     
-    document.getElementById('others-entry-business-chain').value = entry.business_chain || '';
-    document.getElementById('others-entry-timings').value = entry.timings || '';
-    document.getElementById('others-entry-puntuality-issue').value = entry.puntuality_issue || '';
-    document.getElementById('others-entry-quality').value = entry.quality || '';
-    document.getElementById('others-entry-quality-issue').value = entry.quality_issue || '';
-    document.getElementById('others-entry-prb').value = entry.others_prb || '';
-    document.getElementById('others-entry-hiim').value = extractHiimIdFromValue(entry.others_hiim) || '';
+    const businessChainEl = document.getElementById('others-entry-business-chain');
+    if (businessChainEl) businessChainEl.value = entry.business_chain || '';
+    const timingsEl = document.getElementById('others-entry-timings');
+    if (timingsEl) timingsEl.value = entry.timings || '';
+    const timingsStatusEl = document.getElementById('others-entry-timings-status');
+    if (timingsStatusEl) timingsStatusEl.value = entry.timings_status || '';
+    const puntualityIssueEl = document.getElementById('others-entry-puntuality-issue');
+    if (puntualityIssueEl) puntualityIssueEl.value = entry.puntuality_issue || '';
+    const qualityEl = document.getElementById('others-entry-quality');
+    if (qualityEl) qualityEl.value = entry.quality_status || '';
+    const qualityStatusEl = document.getElementById('others-entry-quality-status');
+    if (qualityStatusEl) qualityStatusEl.value = entry.quality_status || '';
+    const qualityIssueEl = document.getElementById('others-entry-quality-issue');
+    if (qualityIssueEl) qualityIssueEl.value = entry.quality_issue || '';
+    const prbEl = document.getElementById('others-entry-prb');
+    if (prbEl) prbEl.value = entry.others_prb || '';
+    const hiimEl = document.getElementById('others-entry-hiim');
+    if (hiimEl) hiimEl.value = extractHiimIdFromValue(entry.others_hiim) || '';
 }
 
 // Populate the new combined item cards UI from an entry object's issues/prbs/hiims
@@ -4827,8 +4847,10 @@ async function handleOTHERSEntrySubmit(event) {
         })(),
     business_chain: formData.get('business_chain'),
         timings: formData.get('timings'),
+        timings_status: formData.get('timings_status'),
         puntuality_issue: formData.get('puntuality_issue'),
-        quality: formData.get('quality'),
+        quality: formData.get('quality'), // Keep for backward compatibility
+        quality_status: formData.get('quality_status'),
         quality_issue: formData.get('quality_issue'),
         others_prb: formData.get('others_prb'),
         others_hiim: formData.get('others_hiim')
@@ -4868,8 +4890,8 @@ async function handleOTHERSEntrySubmit(event) {
 
 async function editEntry(entryId) {
     try {
-        // Always pass application query param for correct backend lookup
-        let app = (typeof filters !== 'undefined' && filters.application) ? filters.application : '';
+        // Get application from filters (same as delete function)
+        let app = filters.application || '';
         let url = `/api/entries/${entryId}`;
         if (app) {
             url += `?application=${encodeURIComponent(app)}`;
@@ -4896,7 +4918,10 @@ async function deleteEntry(entryId) {
     }
     
     try {
-        const response = await fetch(`/api/entries/${entryId}`, {
+        const params = new URLSearchParams();
+        if (filters.application) params.append('application', filters.application);
+        
+        const response = await fetch(`/api/entries/${entryId}?${params.toString()}`, {
             method: 'DELETE',
             credentials: 'include'
         });
