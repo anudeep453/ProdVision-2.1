@@ -83,11 +83,14 @@ class IndependentRowSQLiteAdapter:
                 -- OTHERS-specific common fields
 
                 timings TEXT,
+                timings_status TEXT,
                 puntuality_issue TEXT,
                 quality TEXT,
+                quality_status TEXT,
                 quality_issue TEXT,
                 others_prb TEXT,
                 others_hiim TEXT,
+                business_chain TEXT,
                 
                 -- Row-specific fields (only one type populated per row)
                 -- PRB fields (populated when row_type='prb' or row_type='main' with PRB)
@@ -135,7 +138,10 @@ class IndependentRowSQLiteAdapter:
             ('row_type', "TEXT DEFAULT 'main' CHECK(row_type IN ('main', 'prb', 'hiim', 'issue'))"),
             ('row_position', 'INTEGER DEFAULT 0'),
             ('time_loss', 'TEXT'),
-            ('infra_weekend_manual', 'INTEGER DEFAULT NULL')  # NULL = auto-detect, 0 = manually unchecked, 1 = manually checked
+            ('infra_weekend_manual', 'INTEGER DEFAULT NULL'),  # NULL = auto-detect, 0 = manually unchecked, 1 = manually checked
+            ('timings_status', 'TEXT'),
+            ('quality_status', 'TEXT'),
+            ('business_chain', 'TEXT')
         ]
         
         for column_name, column_def in missing_columns:
@@ -222,11 +228,14 @@ class IndependentRowSQLiteAdapter:
                 'backlog_item': entry_data.get('backlog_item', ''),
 
                 'timings': entry_data.get('timings', ''),
+                'timings_status': entry_data.get('timings_status', ''),
                 'puntuality_issue': entry_data.get('puntuality_issue', ''),
                 'quality': entry_data.get('quality', ''),
+                'quality_status': entry_data.get('quality_status', ''),
                 'quality_issue': entry_data.get('quality_issue', ''),
                 'others_prb': entry_data.get('others_prb', ''),
                 'others_hiim': entry_data.get('others_hiim', ''),
+                'business_chain': entry_data.get('business_chain', ''),
                 # time_loss removed from common_data - it should be specific to each issue
                 'infra_weekend_manual': entry_data.get('infra_weekend_manual'),
                 'created_at': now,
@@ -969,6 +978,9 @@ class IndependentRowSQLiteAdapter:
             columns = [description[0] for description in cursor.description]
             target_entry = dict(zip(columns, target_row))
             
+            # Ensure business_chain field exists for OTHERS entries
+            if target_entry.get('application_name', '').upper() == 'OTHERS' and 'business_chain' not in target_entry:
+                target_entry['business_chain'] = ''
             # If this is a main entry, we need to find related PRBs, HIIMs, and issues
             # that share the same grouping_key
             if target_entry['row_type'] == 'main':
@@ -1122,19 +1134,21 @@ class EntryManager:
     def get_entry_by_id(self, entry_id: int, application_name: str = None) -> Optional[Dict]:
         """Get a specific entry by ID"""
         if application_name:
-            # Search specific application database
+            # First try the specific application database
             adapter = self.adapters.get(application_name.upper())
             if adapter:
-                return adapter.get_entry_by_id(entry_id, application_name)
-        else:
-            # Search all databases for the entry
-            for app_name, adapter in self.adapters.items():
-                try:
-                    entry = adapter.get_entry_by_id(entry_id)
-                    if entry:
-                        return entry
-                except Exception:
-                    continue
+                entry = adapter.get_entry_by_id(entry_id, application_name)
+                if entry:
+                    return entry
+        
+        # If not found in specific application or no application specified, search all databases
+        for app_name, adapter in self.adapters.items():
+            try:
+                entry = adapter.get_entry_by_id(entry_id)
+                if entry:
+                    return entry
+            except Exception:
+                continue
         return None
     
     def create_entry(self, entry_data: Dict) -> Optional[Dict]:
