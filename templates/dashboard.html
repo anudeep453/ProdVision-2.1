@@ -350,6 +350,13 @@
                                 </span>
                                 <div class="column-resize-handle" title="Drag to resize column"></div>
                             </th>
+                            <th draggable="true" data-column="timings" class="draggable-header">
+                                <span class="column-content">
+                                    <span class="column-title">TIMINGS</span>
+                                    <span class="drag-handle">⋮⋮</span>
+                                </span>
+                                <div class="column-resize-handle" title="Drag to resize column"></div>
+                            </th>
                             <th draggable="true" data-column="puntuality_issue" class="draggable-header">
                                 <span class="column-content">
                                     <span class="column-title">PUNTUALITY ISSUE</span>
@@ -427,7 +434,7 @@
             </div>
             
             <!-- CVAR Form -->
-            <form id="cvar-entry-form" class="entry-form">
+            <form id="cvar-entry-form" class="entry-form" style="display: none;">
                 <div class="form-group">
                     <label for="entry-date">Date *</label>
                     <input type="date" id="entry-date" name="date" required max="">
@@ -742,11 +749,24 @@
                     </label>
                 </div>
                 
-
-                
                 <div class="form-group">
                     <label for="others-entry-business-chain">BUSINESS CHAIN</label>
                     <input type="text" id="others-entry-business-chain" name="business_chain" placeholder="Enter business chain">
+                </div>
+                
+                <div class="form-group">
+                    <label for="others-entry-timings">TIMINGS</label>
+                    <input type="text" id="others-entry-timings" name="timings" placeholder="Enter timings">
+                </div>
+                
+                <div class="form-group">
+                    <label for="others-entry-timings-status">TIMINGS STATUS</label>
+                    <select id="others-entry-timings-status" name="timings_status" class="status-select">
+                        <option value="">Select Status</option>
+                        <option value="Red">Red</option>
+                        <option value="Yellow">Yellow</option>
+                        <option value="Green">Green</option>
+                    </select>
                 </div>
                 
                 <div class="form-group">
@@ -756,7 +776,12 @@
                 
                 <div class="form-group">
                     <label for="others-entry-quality">QUALITY</label>
-                    <input type="text" id="others-entry-quality" name="quality" placeholder="Enter quality">
+                    <select id="others-entry-quality" name="quality_status" class="status-select">
+                        <option value="">Select Quality</option>
+                        <option value="Red">Red</option>
+                        <option value="Yellow">Yellow</option>
+                        <option value="Green">Green</option>
+                    </select>
                 </div>
                 
                 <div class="form-group">
