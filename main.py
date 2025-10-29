@@ -547,21 +547,21 @@ def get_entries():
 def get_entry(entry_id):
     """Get a specific production entry by ID"""
     try:
-        # Try to get application from query param for more efficient lookup
-        application = request.args.get('application')
-        entry = entry_manager.get_entry_by_id(entry_id, application)
+        application = request.args.get('application', '').upper()
+        logger.info(f"API GET /api/entries/{entry_id} called with application={application}")
+        entry = entry_manager.get_entry_by_id(entry_id, application if application else None)
         if entry:
-            logger.debug("Entry %s fetched (application=%s)", entry_id, application)
+            logger.info(f"Entry found: id={entry_id}, application={application}")
             response = jsonify(entry)
             response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
             response.headers['Pragma'] = 'no-cache'
             response.headers['Expires'] = '0'
             return response
         else:
-            logger.info("Entry %s not found (application=%s)", entry_id, application)
+            logger.warning(f"Entry NOT found: id={entry_id}, application={application}")
             return jsonify({'error': 'Entry not found'}), 404
     except Exception as e:
-        logger.error("Error fetching entry %s: %s", entry_id, e, exc_info=True)
+        logger.error(f"Error fetching entry {entry_id} for application {application}: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/entries', methods=['POST'])
@@ -604,37 +604,39 @@ def update_entry(entry_id):
     """Update an existing production entry"""
     try:
         data = request.get_json()
-        logger.debug("API update_entry called for id=%s", entry_id)
-        
+        logger.info(f"API update_entry called for id={entry_id}, data={data}")
+
         # Get existing entry - search all databases
         existing_entry = entry_manager.get_entry_by_id(entry_id)
         if not existing_entry:
+            logger.warning(f"Entry not found for id={entry_id}")
             return jsonify({'error': 'Entry not found'}), 404
-        
+
         existing_application = existing_entry.get('application_name')
-        
+
         # Check for duplicate entry if date or application is being changed
         if 'date' in data or 'application_name' in data:
             new_date = data.get('date', existing_entry.get('date'))
             new_application = data.get('application_name', existing_application)
-            
+
             # Check if another entry exists for this date and application (excluding current entry)
-            # Look in the appropriate database
             app_entries = entry_manager.get_entries_by_application(new_application)
             for entry in app_entries:
                 if (entry.get('id') != entry_id and entry.get('date') == new_date):
+                    logger.warning(f"Duplicate entry found for application={new_application} on date={new_date}")
                     return jsonify({'error': f'An entry already exists for {new_application} on {new_date}'}), 400
-        
+
         # Validate entry data using the updated validation function
-        # Allow partial updates by merging with existing entry for validation
         merged_data = dict(existing_entry)
         merged_data.update(data)
         is_valid, error_message = validate_entry_data(merged_data)
         if not is_valid:
+            logger.warning(f"Validation failed for id={entry_id}: {error_message}")
             return jsonify({'error': error_message}), 400
-        
+
         # Update entry - pass the application name for database targeting
         updated_entry = entry_manager.update_entry(entry_id, data, existing_application)
+        logger.info(f"Update result for id={entry_id}: {updated_entry}")
 
         # For XVA, return fresh entries list for immediate UI update
         if existing_application == 'XVA':
@@ -648,9 +650,10 @@ def update_entry(entry_id):
         if updated_entry:
             return jsonify(updated_entry)
         else:
+            logger.error(f"Failed to update entry for id={entry_id}")
             return jsonify({'error': 'Failed to update entry'}), 500
     except Exception as e:
-        logger.error('Exception in API update_entry id=%s: %s', entry_id, e, exc_info=True)
+        logger.error(f'Exception in API update_entry id={entry_id}: {e}', exc_info=True)
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/entries/<int:entry_id>', methods=['DELETE'])
@@ -658,10 +661,10 @@ def update_entry(entry_id):
 def delete_entry(entry_id):
     """Delete a production entry"""
     try:
-        # Delete entry - the method will search all databases automatically
-        success = entry_manager.delete_entry(entry_id)
-        # Try to get application from query param for more efficient lookup
+        # Get application from query param for efficient lookup
         application = request.args.get('application')
+        # Delete entry from specific application database if provided
+        success = entry_manager.delete_entry(entry_id, application)
         if application == 'XVA':
             fresh_entries = entry_manager.get_entries_by_application('XVA')
             response = jsonify({'message': 'Entry deleted successfully', 'fresh_entries': fresh_entries})
@@ -809,21 +812,25 @@ def get_stats():
         years = request.args.getlist('year')
         months = request.args.getlist('month')
         
-        # Get all entries from SharePoint SQLite database
-        all_entries = entry_manager.get_all_entries()
+        # Get entries from appropriate database(s)
+        if application:
+            all_entries = entry_manager.get_entries_by_application(application, start_date, end_date)
+        else:
+            all_entries = entry_manager.get_all_entries()
         
-        # Apply filters
+        # Apply additional filters (date filters already applied when application is specified)
         entries = []
         for entry in all_entries:
-            # Date range filters
-            if start_date:
-                entry_date = convert_date_string(entry.get('date', ''))
-                if entry_date < datetime.strptime(start_date, '%Y-%m-%d').date():
-                    continue
-            if end_date:
-                entry_date = convert_date_string(entry.get('date', ''))
-                if entry_date > datetime.strptime(end_date, '%Y-%m-%d').date():
-                    continue
+            # Date range filters (only apply when getting all entries, not when application-specific)
+            if not application:
+                if start_date:
+                    entry_date = convert_date_string(entry.get('date', ''))
+                    if entry_date < datetime.strptime(start_date, '%Y-%m-%d').date():
+                        continue
+                if end_date:
+                    entry_date = convert_date_string(entry.get('date', ''))
+                    if entry_date > datetime.strptime(end_date, '%Y-%m-%d').date():
+                        continue
             
             # Monthly and yearly filters
             if years or months:
@@ -837,8 +844,6 @@ def get_stats():
                     continue
             
             # Other filters
-            if application and application.lower() not in entry.get('application_name', '').lower():
-                continue
             if quality_status and entry.get('quality_status') != quality_status:
                 continue
             if prb_only == 'true' and not entry.get('prb_id_number'):
@@ -947,26 +952,48 @@ def get_stats():
                 quality_counts[quality_status] += 1
                 monthly_quality[month_key][quality_status] += 1
             
-            # Calculate punctuality based only on PRC Mail status
-            prc_mail_status = entry.get('prc_mail_status')
-            if prc_mail_status:
-                # Map old status values to new color scheme
-                if prc_mail_status in ['Red', 'red']:
+            # Calculate punctuality - handle XVA vs other applications differently
+            application_name = entry.get('application_name', '').upper()
+            if application_name == 'XVA':
+                # For XVA: Punctuality is red if any of valo, sensi, or cf_ra is red
+                valo_status = entry.get('valo_status')
+                sensi_status = entry.get('sensi_status')
+                cf_ra_status = entry.get('cf_ra_status')
+                
+                if valo_status == 'Red' or sensi_status == 'Red' or cf_ra_status == 'Red':
                     punctuality_counts['Red'] += 1
                     monthly_punctuality[month_key]['Red'] += 1
-                elif prc_mail_status in ['Yellow', 'yellow', 'warning']:
+                elif valo_status == 'Yellow' or sensi_status == 'Yellow' or cf_ra_status == 'Yellow':
                     punctuality_counts['Yellow'] += 1
                     monthly_punctuality[month_key]['Yellow'] += 1
-                elif prc_mail_status in ['Green', 'green', 'on-time']:
+                elif valo_status == 'Green' or sensi_status == 'Green' or cf_ra_status == 'Green':
                     punctuality_counts['Green'] += 1
                     monthly_punctuality[month_key]['Green'] += 1
-                elif prc_mail_status in ['late']:
-                    punctuality_counts['Red'] += 1
-                    monthly_punctuality[month_key]['Red'] += 1
                 else:
-                    # For any other status, count as Yellow
+                    # If no XVA statuses are set, count as Yellow
                     punctuality_counts['Yellow'] += 1
                     monthly_punctuality[month_key]['Yellow'] += 1
+            else:
+                # For other applications: Use PRC Mail status
+                prc_mail_status = entry.get('prc_mail_status')
+                if prc_mail_status:
+                    # Map old status values to new color scheme
+                    if prc_mail_status in ['Red', 'red']:
+                        punctuality_counts['Red'] += 1
+                        monthly_punctuality[month_key]['Red'] += 1
+                    elif prc_mail_status in ['Yellow', 'yellow', 'warning']:
+                        punctuality_counts['Yellow'] += 1
+                        monthly_punctuality[month_key]['Yellow'] += 1
+                    elif prc_mail_status in ['Green', 'green', 'on-time']:
+                        punctuality_counts['Green'] += 1
+                        monthly_punctuality[month_key]['Green'] += 1
+                    elif prc_mail_status in ['late']:
+                        punctuality_counts['Red'] += 1
+                        monthly_punctuality[month_key]['Red'] += 1
+                    else:
+                        # For any other status, count as Yellow
+                        punctuality_counts['Yellow'] += 1
+                        monthly_punctuality[month_key]['Yellow'] += 1
             
             # Count PRB statuses (legacy single + array rows)
             prb_id_status = entry.get('prb_id_status')
@@ -1204,8 +1231,9 @@ def get_xva_stats():
                 
                 # Increment total red count for this month
                 monthly_red_counts[month_key]['total_red'] += 1
-                
-                # Root cause analysis
+            
+            # Root cause analysis - count all entries with root cause data, not just red cards
+            if entry.get('root_cause_application'):
                 root_cause_app = entry.get('root_cause_application') or 'Unknown'
                 root_cause_type = entry.get('root_cause_type') or 'Unknown'
                 
