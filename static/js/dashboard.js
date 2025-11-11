@@ -406,8 +406,6 @@ function handleFullscreenFilterApply() {
     // Copy filter values from fullscreen to main filters
     const fullscreenYear = document.getElementById('fullscreen-year-filter');
     const fullscreenMonth = document.getElementById('fullscreen-month-filter');
-    const fullscreenApp = document.getElementById('fullscreen-application-filter');
-    const fullscreenGraphType = document.querySelector('input[name="fullscreen-graph-type"]:checked');
     
     // Update main filters
     if (chartsFilters.year && fullscreenYear) {
@@ -422,10 +420,6 @@ function handleFullscreenFilterApply() {
         });
     }
     
-    if (filters.application && fullscreenApp) {
-        filters.application = fullscreenApp.value;
-    }
-    
     
     // Reload charts data
     loadChartsData();
@@ -438,8 +432,6 @@ function handleFullscreenAllFilterApply() {
     // Copy filter values from fullscreen all to main filters
     const fullscreenAllYear = document.getElementById('fullscreen-all-year-filter');
     const fullscreenAllMonth = document.getElementById('fullscreen-all-month-filter');
-    const fullscreenAllApp = document.getElementById('fullscreen-all-application-filter');
-    const fullscreenAllGraphType = document.querySelector('input[name="fullscreen-all-graph-type"]:checked');
     
     // Update main filters
     if (chartsFilters.year && fullscreenAllYear) {
@@ -452,10 +444,6 @@ function handleFullscreenAllFilterApply() {
         Array.from(chartsFilters.month.options).forEach(option => {
             option.selected = Array.from(fullscreenAllMonth.selectedOptions).some(selected => selected.value === option.value);
         });
-    }
-    
-    if (filters.application && fullscreenAllApp) {
-        filters.application = fullscreenAllApp.value;
     }
     
     
@@ -485,12 +473,6 @@ function syncFullscreenFilters() {
         });
     }
     
-    // Sync application filter
-    const fullscreenApp = document.getElementById('fullscreen-application-filter');
-    if (fullscreenApp && filters.application) {
-        fullscreenApp.value = filters.application;
-    }
-    
 }
 
 function syncFullscreenAllFilters() {
@@ -508,12 +490,6 @@ function syncFullscreenAllFilters() {
         Array.from(fullscreenAllMonth.options).forEach(option => {
             option.selected = Array.from(chartsFilters.month.selectedOptions).some(selected => selected.value === option.value);
         });
-    }
-    
-    // Sync application filter
-    const fullscreenAllApp = document.getElementById('fullscreen-all-application-filter');
-    if (fullscreenAllApp && filters.application) {
-        fullscreenAllApp.value = filters.application;
     }
     
 }
@@ -541,6 +517,8 @@ function getCurrentFullscreenChartType() {
     if (charts.punctuality) return 'punctuality';
     if (charts.prb) return 'prb';
     if (charts.hiim) return 'hiim';
+    if (charts['xva-monthly-red']) return 'xva-monthly-red';
+    if (charts['xva-root-cause']) return 'xva-root-cause';
     return null;
 }
 
@@ -848,7 +826,7 @@ function toggleFormFieldValidation(application) {
 }
 
 function toggleXVAChartsAndTables(application) {
-    // Toggle XVA chart wrappers
+    // Toggle XVA chart wrappers (now includes both charts and tables)
     const xvaChartWrappers = document.querySelectorAll('.xva-only');
     xvaChartWrappers.forEach(wrapper => {
         if (application === 'XVA') {
@@ -858,16 +836,6 @@ function toggleXVAChartsAndTables(application) {
         }
     });
     
-    // Toggle XVA tables section
-    const xvaTablesSection = document.getElementById('xva-tables-section');
-    if (xvaTablesSection) {
-        if (application === 'XVA') {
-            xvaTablesSection.style.display = 'block';
-        } else {
-            xvaTablesSection.style.display = 'none';
-        }
-    }
-    
     // Toggle XVA chart visibility filters
     const xvaVisibilityLabels = document.querySelectorAll('.visibility-label.xva-only');
     xvaVisibilityLabels.forEach(label => {
@@ -875,6 +843,11 @@ function toggleXVAChartsAndTables(application) {
             label.style.display = '';
         } else {
             label.style.display = 'none';
+            // Uncheck XVA checkboxes when hiding them
+            const checkbox = label.querySelector('input[type="checkbox"]');
+            if (checkbox) {
+                checkbox.checked = false;
+            }
         }
     });
 }
@@ -1268,14 +1241,43 @@ function showAuthModal() {
     if (isAuthenticated) {
         handleLogout();
     } else {
-        authModal.style.display = 'flex';
-        passwordInput.focus();
+        try {
+            // Ensure the modal is a direct child of body to avoid stacking context issues
+            if (authModal && authModal.parentElement !== document.body) {
+                document.body.appendChild(authModal);
+            }
+            // Force fixed positioning and very high z-index as a fallback
+            authModal.style.position = 'fixed';
+            authModal.style.left = '0';
+            authModal.style.top = '0';
+            authModal.style.width = '100%';
+            authModal.style.height = '100%';
+            authModal.style.display = 'flex';
+            authModal.style.zIndex = '3000';
+        } catch (e) {
+            // Fallback to simple display change if DOM manipulation fails
+            authModal.style.display = 'flex';
+        }
+        // Focus after shown
+        setTimeout(() => { try { passwordInput.focus(); } catch(e) {} }, 50);
     }
 }
 
 function hideAuthModal() {
-    authModal.style.display = 'none';
-    passwordInput.value = '';
+    try {
+        authModal.style.display = 'none';
+        // Remove inline styles we set as fallback
+        authModal.style.position = '';
+        authModal.style.left = '';
+        authModal.style.top = '';
+        authModal.style.width = '';
+        authModal.style.height = '';
+        authModal.style.zIndex = '';
+        passwordInput.value = '';
+        // Optionally, move modal back to original container if needed (skip to keep simple)
+    } catch (e) {
+        try { authModal.style.display = 'none'; passwordInput.value = ''; } catch(_) {}
+    }
 }
 
 async function handleLogin(event) {
@@ -1521,13 +1523,12 @@ async function calculateMonthEndCounts(month, year) {
 function displayEntries(entries) {
     entriesTbody.innerHTML = '';
 
-    // Non-Infra filter: filter out entries where infra_weekend_manual === 1
+    // Non-Weekend filter: filter out all Friday entries
     let filteredEntries = entries;
     if (filters.nonInfraOnly && filters.nonInfraOnly.checked) {
         filteredEntries = entries.filter(e => {
-            // Exclude if infra_weekend_manual is 1 (true/checked)
-            // Accept 1 (int), '1' (string), or true
-            return !(e.infra_weekend_manual === 1 || e.infra_weekend_manual === '1' || e.infra_weekend_manual === true);
+            // Exclude all Friday entries
+            return !isFriday(e.date);
         });
     }
 
@@ -5149,6 +5150,14 @@ function openFullscreenChart(chartType) {
         
         fullscreenChartTitle.textContent = titles[chartType] || 'Chart';
         
+        // Show/hide table container based on chart type
+        const fullscreenTableContainer = document.getElementById('fullscreen-table-container');
+        if (chartType === 'xva-monthly-red' || chartType === 'xva-root-cause') {
+            fullscreenTableContainer.style.display = 'block';
+        } else {
+            fullscreenTableContainer.style.display = 'none';
+        }
+        
         // Show fullscreen modal first
         fullscreenModal.style.display = 'flex';
         console.log('Fullscreen modal displayed:', fullscreenModal.style.display);
@@ -5190,6 +5199,17 @@ function openFullscreenChart(chartType) {
                 } else if (chartType === 'hiim') {
                     console.log('Creating HIIM fullscreen chart');
                     charts.fullscreen = createFullscreenHIIMChart(ctx);
+                } else if (chartType === 'xva-monthly-red') {
+                    console.log('Creating XVA Monthly Red fullscreen chart');
+                    charts.fullscreen = createFullscreenXVAMonthlyRedChart(ctx);
+                } else if (chartType === 'xva-root-cause') {
+                    console.log('Creating XVA Root Cause fullscreen chart');
+                    charts.fullscreen = createFullscreenXVARootCauseChart(ctx);
+                }
+                
+                // Populate table data for XVA charts
+                if (chartType === 'xva-monthly-red' || chartType === 'xva-root-cause') {
+                    populateFullscreenTable(chartType);
                 }
                 
                 console.log('Fullscreen chart created:', charts.fullscreen);
@@ -5209,6 +5229,12 @@ function closeFullscreenChart() {
     if (charts.fullscreen) {
         charts.fullscreen.destroy();
         charts.fullscreen = null;
+    }
+    
+    // Hide table container
+    const fullscreenTableContainer = document.getElementById('fullscreen-table-container');
+    if (fullscreenTableContainer) {
+        fullscreenTableContainer.style.display = 'none';
     }
 }
 
@@ -5230,6 +5256,20 @@ async function openAllChartsFullscreen() {
         const response = await fetch('/api/stats?' + buildChartsQueryString());
         const stats = await response.json();
         
+        // Load XVA data if XVA charts are visible and application is XVA
+        let xvaStats = null;
+        const visibleCharts = getVisibleCharts();
+        if ((visibleCharts['xva-monthly-red'] || visibleCharts['xva-root-cause']) && filters.application === 'XVA' && response.ok) {
+            try {
+                const xvaResponse = await fetch('/api/xva/stats?' + buildChartsQueryString());
+                if (xvaResponse.ok) {
+                    xvaStats = await xvaResponse.json();
+                }
+            } catch (xvaError) {
+                console.error('Error loading XVA data for fullscreen:', xvaError);
+            }
+        }
+        
         if (response.ok) {
             // Wait a bit for the modal to be displayed, then create visible charts only
             setTimeout(() => {
@@ -5238,7 +5278,6 @@ async function openAllChartsFullscreen() {
                     destroyAllFullscreenCharts();
                     
                     // Get visible charts based on visibility checkboxes
-                    const visibleCharts = getVisibleCharts();
                     // Create only visible charts in fullscreen with data
                     if (visibleCharts.quality) {
                         const qualityCtx = document.getElementById('fullscreen-quality-chart').getContext('2d');
@@ -5258,6 +5297,25 @@ async function openAllChartsFullscreen() {
                     if (visibleCharts.hiim) {
                         const hiimCtx = document.getElementById('fullscreen-hiim-chart').getContext('2d');
                         charts.fullscreenHIIM = createFullscreenHIIMChartWithData(hiimCtx, stats.hiim_distribution, stats.monthly_hiim);
+                    }
+                    
+                    if (visibleCharts['xva-monthly-red'] && xvaStats) {
+                        const xvaMonthlyRedCtx = document.getElementById('fullscreen-xva-monthly-red-chart').getContext('2d');
+                        charts.fullscreenXVAMonthlyRed = createFullscreenXVAMonthlyRedChartWithData(xvaMonthlyRedCtx, xvaStats.monthly_red_counts);
+                    }
+                    
+                    if (visibleCharts['xva-root-cause'] && xvaStats) {
+                        const xvaRootCauseCtx = document.getElementById('fullscreen-xva-root-cause-chart').getContext('2d');
+                        charts.fullscreenXVARootCause = createFullscreenXVARootCauseChartWithData(xvaRootCauseCtx, xvaStats.root_cause_analysis);
+                    }
+                    
+                    // Populate XVA tables in fullscreen all-charts modal
+                    if (visibleCharts['xva-monthly-red'] && xvaStats) {
+                        populateFullscreenAllXVAMonthlyRedTable(xvaStats.monthly_red_counts);
+                    }
+                    
+                    if (visibleCharts['xva-root-cause'] && xvaStats) {
+                        populateFullscreenAllXVARootCauseTable(xvaStats.root_cause_analysis);
                     }
                     
                     // Hide/show chart containers based on visibility
@@ -5299,6 +5357,14 @@ function destroyAllFullscreenCharts() {
         charts.fullscreenHIIM.destroy();
         charts.fullscreenHIIM = null;
     }
+    if (charts.fullscreenXVAMonthlyRed) {
+        charts.fullscreenXVAMonthlyRed.destroy();
+        charts.fullscreenXVAMonthlyRed = null;
+    }
+    if (charts.fullscreenXVARootCause) {
+        charts.fullscreenXVARootCause.destroy();
+        charts.fullscreenXVARootCause = null;
+    }
 }
 
 function getVisibleCharts() {
@@ -5306,7 +5372,9 @@ function getVisibleCharts() {
         quality: chartVisibilityFilters.quality.checked,
         punctuality: chartVisibilityFilters.punctuality.checked,
         prb: chartVisibilityFilters.prb.checked,
-        hiim: chartVisibilityFilters.hiim.checked
+        hiim: chartVisibilityFilters.hiim.checked,
+        'xva-monthly-red': chartVisibilityFilters['xva-monthly-red']?.checked || false,
+        'xva-root-cause': chartVisibilityFilters['xva-root-cause']?.checked || false
     };
 }
 
@@ -5315,14 +5383,17 @@ function updateFullscreenChartVisibility(visibleCharts) {
         quality: document.querySelector('.fullscreen-chart-item[data-chart="quality"]'),
         punctuality: document.querySelector('.fullscreen-chart-item[data-chart="punctuality"]'),
         prb: document.querySelector('.fullscreen-chart-item[data-chart="prb"]'),
-        hiim: document.querySelector('.fullscreen-chart-item[data-chart="hiim"]')
+        hiim: document.querySelector('.fullscreen-chart-item[data-chart="hiim"]'),
+        'xva-monthly-red': document.querySelector('.fullscreen-chart-item[data-chart="xva-monthly-red"]'),
+        'xva-root-cause': document.querySelector('.fullscreen-chart-item[data-chart="xva-root-cause"]')
     };
     
-    // Show/hide chart items based on visibility
+    // Show/hide chart items based on visibility and application
     Object.keys(chartItems).forEach(chartType => {
         const chartItem = chartItems[chartType];
         if (chartItem) {
-            if (visibleCharts[chartType]) {
+            const isXVAChart = chartType === 'xva-monthly-red' || chartType === 'xva-root-cause';
+            if (visibleCharts[chartType] && (!isXVAChart || filters.application === 'XVA')) {
                 chartItem.style.display = 'flex';
             } else {
                 chartItem.style.display = 'none';
@@ -5875,6 +5946,180 @@ function createFullscreenHIIMChart(ctx) {
         });
 }
 
+function createFullscreenXVAMonthlyRedChart(ctx) {
+    // Extract data from the existing XVA Monthly Red chart
+    let monthlyData = [];
+    
+    if (charts['xva-monthly-red'] && charts['xva-monthly-red'].data) {
+        const chartData = charts['xva-monthly-red'].data;
+        if (chartData.labels && chartData.datasets) {
+            monthlyData = chartData.labels.map((label, index) => [
+                index,
+                {
+                    month_name: label,
+                    valo_red: chartData.datasets[0].data[index] || 0,
+                    sensi_red: chartData.datasets[1].data[index] || 0,
+                    cf_ra_red: chartData.datasets[2].data[index] || 0,
+                    total_red: (chartData.datasets[0].data[index] || 0) + (chartData.datasets[1].data[index] || 0) + (chartData.datasets[2].data[index] || 0)
+                }
+            ]);
+        }
+    }
+    
+    // Prepare data for grouped bar chart
+    const labels = monthlyData.map(item => item[1].month_name);
+    const datasets = [
+        {
+            label: 'Valo Red',
+            data: monthlyData.map(item => item[1].valo_red || 0),
+            backgroundColor: '#dc3545',
+            borderColor: '#c82333',
+            borderWidth: 2,
+            borderRadius: 6,
+            borderSkipped: false,
+        },
+        {
+            label: 'Sensi Red',
+            data: monthlyData.map(item => item[1].sensi_red || 0),
+            backgroundColor: '#fd7e14',
+            borderColor: '#e55100',
+            borderWidth: 2,
+            borderRadius: 6,
+            borderSkipped: false,
+        },
+        {
+            label: 'CF RA Red',
+            data: monthlyData.map(item => item[1].cf_ra_red || 0),
+            backgroundColor: '#6f42c1',
+            borderColor: '#5a32a3',
+            borderWidth: 2,
+            borderRadius: 6,
+            borderSkipped: false,
+        }
+    ];
+    
+    return new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: datasets
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: true,
+                    position: 'top'
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            return `${context.dataset.label}: ${context.parsed.y}`;
+                        }
+                    }
+                },
+                datalabels: {
+                    display: true,
+                    color: 'white',
+                    font: {
+                        weight: 'bold',
+                        size: 12
+                    },
+                    formatter: function(value) {
+                        return value > 0 ? value : '';
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    display: true,
+                    title: {
+                        display: true,
+                        text: 'Month'
+                    },
+                    grid: {
+                        display: false
+                    }
+                },
+                y: {
+                    display: true,
+                    title: {
+                        display: true,
+                        text: 'Red Count'
+                    },
+                    beginAtZero: true,
+                    ticks: {
+                        stepSize: 1
+                    }
+                }
+            }
+        }
+    });
+}
+
+function createFullscreenXVARootCauseChart(ctx) {
+    // Extract data from the existing XVA Root Cause chart
+    let labels = [];
+    let data = [];
+    
+    if (charts['xva-root-cause'] && charts['xva-root-cause'].data) {
+        const chartData = charts['xva-root-cause'].data;
+        if (chartData.labels && chartData.datasets && chartData.datasets[0]) {
+            labels = chartData.labels;
+            data = chartData.datasets[0].data;
+        }
+    }
+    
+    // Generate distinct colors for each application
+    const colors = generateDistinctColors(labels.length);
+    
+    return new Chart(ctx, {
+        type: 'pie',
+        data: {
+            labels: labels,
+            datasets: [{
+                data: data,
+                backgroundColor: colors.backgroundColor,
+                borderColor: colors.borderColor,
+                borderWidth: 2
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: true,
+                    position: 'right'
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                            const percentage = ((context.parsed / total) * 100).toFixed(1);
+                            return `${context.label}: ${context.parsed} (${percentage}%)`;
+                        }
+                    }
+                },
+                datalabels: {
+                    display: true,
+                    color: 'white',
+                    font: {
+                        weight: 'bold',
+                        size: 12
+                    },
+                    formatter: function(value, context) {
+                        const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                        const percentage = ((value / total) * 100).toFixed(1);
+                        return `${value}\n(${percentage}%)`;
+                    }
+                }
+            }
+        }
+    });
+}
+
 // New fullscreen chart functions that accept data as parameters
 function createFullscreenQualityChartWithData(ctx, qualityData, monthlyData) {
     // Bar chart logic (same as regular chart)
@@ -6258,6 +6503,283 @@ function createFullscreenHIIMChartWithData(ctx, hiimData, monthlyData) {
         });
 }
 
+function createFullscreenXVAMonthlyRedChartWithData(ctx, monthlyData) {
+    // Prepare data for grouped bar chart
+    const labels = monthlyData.map(item => item[1].month_name);
+    const datasets = [
+        {
+            label: 'Valo Red',
+            data: monthlyData.map(item => item[1].valo_red || 0),
+            backgroundColor: '#dc3545',
+            borderColor: '#c82333',
+            borderWidth: 2,
+            borderRadius: 6,
+            borderSkipped: false,
+        },
+        {
+            label: 'Sensi Red',
+            data: monthlyData.map(item => item[1].sensi_red || 0),
+            backgroundColor: '#fd7e14',
+            borderColor: '#e55100',
+            borderWidth: 2,
+            borderRadius: 6,
+            borderSkipped: false,
+        },
+        {
+            label: 'CF RA Red',
+            data: monthlyData.map(item => item[1].cf_ra_red || 0),
+            backgroundColor: '#6f42c1',
+            borderColor: '#5a32a3',
+            borderWidth: 2,
+            borderRadius: 6,
+            borderSkipped: false,
+        }
+    ];
+    
+    return new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: datasets
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: true,
+                    position: 'top'
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            return `${context.dataset.label}: ${context.parsed.y}`;
+                        }
+                    }
+                },
+                datalabels: {
+                    display: true,
+                    color: 'white',
+                    font: {
+                        weight: 'bold',
+                        size: 12
+                    },
+                    formatter: function(value) {
+                        return value > 0 ? value : '';
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    display: true,
+                    title: {
+                        display: true,
+                        text: 'Month'
+                    },
+                    grid: {
+                        display: false
+                    }
+                },
+                y: {
+                    display: true,
+                    title: {
+                        display: true,
+                        text: 'Red Count'
+                    },
+                    beginAtZero: true,
+                    ticks: {
+                        stepSize: 1
+                    }
+                }
+            }
+        }
+    });
+}
+
+function createFullscreenXVARootCauseChartWithData(ctx, rootCauseData) {
+    // Group data by application for pie chart
+    const appCounts = {};
+    rootCauseData.forEach(item => {
+        const app = item.root_cause_application;
+        if (!appCounts[app]) {
+            appCounts[app] = 0;
+        }
+        appCounts[app] += item.count;
+    });
+    
+    const labels = Object.keys(appCounts);
+    const data = Object.values(appCounts);
+    
+    // Generate distinct colors for each application
+    const colors = generateDistinctColors(labels.length);
+    
+    return new Chart(ctx, {
+        type: 'pie',
+        data: {
+            labels: labels,
+            datasets: [{
+                data: data,
+                backgroundColor: colors.backgroundColor,
+                borderColor: colors.borderColor,
+                borderWidth: 2
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: true,
+                    position: 'right'
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                            const percentage = ((context.parsed / total) * 100).toFixed(1);
+                            return `${context.label}: ${context.parsed} (${percentage}%)`;
+                        }
+                    }
+                },
+                datalabels: {
+                    display: true,
+                    color: 'white',
+                    font: {
+                        weight: 'bold',
+                        size: 12
+                    },
+                    formatter: function(value, context) {
+                        const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                        const percentage = ((value / total) * 100).toFixed(1);
+                        return `${value}\n(${percentage}%)`;
+                    }
+                }
+            }
+        }
+    });
+}
+
+function populateFullscreenTable(chartType) {
+    const tableHead = document.getElementById('fullscreen-table-head');
+    const tableBody = document.getElementById('fullscreen-table-body');
+    const tableFoot = document.getElementById('fullscreen-table-foot');
+    
+    // Clear existing content
+    tableHead.innerHTML = '';
+    tableBody.innerHTML = '';
+    tableFoot.innerHTML = '';
+    
+    if (chartType === 'xva-monthly-red') {
+        // Populate Monthly Red Count table
+        tableHead.innerHTML = `
+            <tr>
+                <th>Month</th>
+                <th>Valo Red</th>
+                <th>Sensi Red</th>
+                <th>CF RA Red</th>
+                <th>Total Red Count</th>
+            </tr>
+        `;
+        
+        // Get data from the existing table
+        const sourceTable = document.getElementById('xva-monthly-red-tbody');
+        if (sourceTable) {
+            const rows = sourceTable.querySelectorAll('tr');
+            rows.forEach(row => {
+                const newRow = document.createElement('tr');
+                newRow.innerHTML = row.innerHTML;
+                tableBody.appendChild(newRow);
+            });
+        }
+        
+    } else if (chartType === 'xva-root-cause') {
+        // Populate Root Cause Analysis table
+        tableHead.innerHTML = `
+            <tr>
+                <th>Root Cause Application</th>
+                <th>Root Cause Type</th>
+                <th>Total Count</th>
+            </tr>
+        `;
+        
+        // Get data from the existing table
+        const sourceTable = document.getElementById('xva-root-cause-tbody');
+        if (sourceTable) {
+            const rows = sourceTable.querySelectorAll('tr');
+            rows.forEach(row => {
+                const newRow = document.createElement('tr');
+                newRow.innerHTML = row.innerHTML;
+                tableBody.appendChild(newRow);
+            });
+        }
+        
+        // Add grand total row
+        const sourceFoot = document.getElementById('xva-root-cause-table').querySelector('tfoot');
+        if (sourceFoot) {
+            tableFoot.innerHTML = sourceFoot.innerHTML;
+            tableFoot.style.display = 'table-footer-group';
+        }
+    }
+}
+
+// Functions to populate XVA tables in all-charts fullscreen modal
+function populateFullscreenAllXVAMonthlyRedTable(monthlyRedData) {
+    const tableBody = document.getElementById('fullscreen-all-xva-monthly-red-tbody');
+    
+    if (!tableBody || !monthlyRedData) return;
+    
+    // Clear existing content
+    tableBody.innerHTML = '';
+    
+    // Populate table with data - data is array of [monthKey, data] pairs
+    monthlyRedData.forEach(([monthKey, data]) => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>${data.month_name}</td>
+            <td>${data.valo_red}</td>
+            <td>${data.sensi_red}</td>
+            <td>${data.cf_ra_red}</td>
+            <td><strong>${data.total_red}</strong></td>
+        `;
+        tableBody.appendChild(row);
+    });
+}
+
+function populateFullscreenAllXVARootCauseTable(rootCauseData) {
+    const tableBody = document.getElementById('fullscreen-all-xva-root-cause-tbody');
+    const tableFoot = document.getElementById('fullscreen-all-xva-root-cause-foot');
+    
+    if (!tableBody || !rootCauseData) return;
+    
+    // Clear existing content
+    tableBody.innerHTML = '';
+    if (tableFoot) tableFoot.innerHTML = '';
+    
+    let grandTotal = 0;
+    
+    // Populate table with data - data is array of objects with root_cause_application, root_cause_type, count
+    rootCauseData.forEach(item => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>${item.root_cause_application}</td>
+            <td>${item.root_cause_type}</td>
+            <td>${item.count}</td>
+        `;
+        tableBody.appendChild(row);
+        grandTotal += item.count;
+    });
+    
+    // Add grand total row
+    if (tableFoot) {
+        tableFoot.innerHTML = `
+            <tr class="grand-total-row">
+                <td colspan="2"><strong>Grand Total</strong></td>
+                <td><strong>${grandTotal}</strong></td>
+            </tr>
+        `;
+    }
+}
+
 // Month-based grouping functions (replacing weekend logic)
 function getMonthKey(dateString) {
     const date = new Date(dateString);
@@ -6435,7 +6957,7 @@ function getDayOfWeek(dateString, infraWeekendManual = null) {
     
     // Check if we should show "Infra Week" for Friday entries
     if (dayOfWeek === 5 && shouldShowInfraWeek(dateString, infraWeekendManual)) {
-        return `${dayName}<br><small class="infra-week-label">Weekend Batch</small>`;
+        return `${dayName}<br><small class="infra-week-label">Infra Weekend</small>`;
     }
     
     return dayName;
